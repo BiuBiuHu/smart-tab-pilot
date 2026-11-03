@@ -1,6 +1,6 @@
 # Smart Tab Pilot
 
-Manifest V3 Chrome 扩展：**精确 URL 去重跳转** + **基于页面正文的语义标签分组**（同域不同主题分不同组，不按域名聚合）。快速搜索为可选能力（弹窗默认关闭）。
+Manifest V3 Chrome 扩展：**精确 URL 去重跳转** + **基于页面正文的语义标签分组**（同域不同主题分不同组，不按域名聚合）。UI 使用 Chrome **侧边栏（side panel）**占满浏览器侧栏；快速搜索为可选能力（侧边栏内默认关闭）。
 
 纯前端 JS，无需构建步骤；可直接「加载已解压的扩展程序」。开源协议：[MIT](./LICENSE)。
 
@@ -9,7 +9,7 @@ Manifest V3 Chrome 扩展：**精确 URL 去重跳转** + **基于页面正文�
 1. **精确 URL 去重**  
    同窗口内若已有标签页打开了相同 URL，则激活已有标签并关闭新标签。  
    - 默认 **精确匹配（含 hash）**：设置项 `ignoreHash` 默认为 `false`。  
-   - 可在弹窗中开启「去重时忽略 hash」。  
+   - 可在侧边栏中开启「去重时忽略 hash」。  
    - 跳过 `chrome://`、`chrome-extension://`、`about:`、`edge://` 等内部页。
 
 2. **语义分组（按页面正文，而非域名）**  
@@ -20,13 +20,17 @@ Manifest V3 Chrome 扩展：**精确 URL 去重跳转** + **基于页面正文�
 3. **模型策略**  
    - 优先 Chrome 内置 Prompt API `LanguageModel`（Gemini Nano）。  
    - 用与 `create`/`prompt` 相同的 options 调用 `LanguageModel.availability()`。  
-   - `downloadable` / `downloading`：弹窗显示状态，并提供需用户手势触发的「下载 Nano」按钮（`LanguageModel.create()`）。  
+   - `downloadable` / `downloading`：侧边栏显示状态，并提供需用户手势触发的「下载 Nano」按钮（`LanguageModel.create()`）。  
    - `unavailable` 或 API 缺失：可配置 OpenAI 兼容接口（Base URL / API Key / 模型名，存 `chrome.storage.sync`）。  
-   - 仍无模型时：仅用标题+摘要的关键词启发式，并在弹窗提示状态。
+   - 仍无模型时：仅用标题+摘要的关键词启发式，并在侧边栏提示状态。
 
 4. **快速搜索（P1 / 可选，默认关闭）**  
-   - 在弹窗「功能开关」中启用后可用。  
-   - 按标题 / URL 搜索打开的标签与最近关闭记录；快捷键 **Ctrl+Shift+K** / **⌘⇧K** 打开弹窗。
+   - 在侧边栏「功能开关」中启用后可用。  
+   - 按标题 / URL 搜索打开的标签与最近关闭记录；快捷键 **Ctrl+Shift+K** / **⌘⇧K** 打开侧边栏。
+
+5. **侧边栏 UI**  
+   - 使用 `chrome.sidePanel`；点击工具栏图标（或快捷键）打开并占满浏览器侧栏。  
+   - 不再使用 action popup。
 
 ## 如何加载（Load unpacked）
 
@@ -40,7 +44,7 @@ Manifest V3 Chrome 扩展：**精确 URL 去重跳转** + **基于页面正文�
 
    （若你已把项目拷到本机，选择包含 `manifest.json` 的那一层文件夹。）
 
-4. 固定工具栏图标，打开弹窗即可配置。
+4. 固定工具栏图标，**点击图标**即可在浏览器右侧打开侧边栏并配置（也可使用 Ctrl/⌘⇧K）。
 
 修改代码后，在扩展管理页点击该扩展的 **重新加载**。
 
@@ -48,15 +52,22 @@ Manifest V3 Chrome 扩展：**精确 URL 去重跳转** + **基于页面正文�
 
 - 需要支持 [Prompt API](https://developer.chrome.com/docs/ai/prompt-api)（`LanguageModel`）的较新 Chrome。  
 - 部分环境需开启相关实验旗标，并允许下载端侧模型。  
-- 首次使用若状态为「可下载」，请在弹窗中点击 **下载 / 启用 Nano 模型**（必须由用户点击触发）。  
+- 首次使用若状态为「可下载」，请在侧边栏中点击 **下载 / 启用 Nano 模型**（必须由用户点击触发）。  
 - 若 Nano 不可用，请填写自定义 OpenAI 兼容端点，或依赖启发式分组。
 
-## 弹窗说明（中文 UI）
+## 如何打开侧边栏
+
+1. 加载扩展并固定工具栏图标。  
+2. **点击工具栏图标** → Chrome 打开本扩展侧边栏（占满侧栏区域）。  
+3. 或按 **Ctrl+Shift+K** / **⌘⇧K**（`commands._execute_action`，可在 `chrome://extensions/shortcuts` 修改）。  
+4. 修改代码后：在 `chrome://extensions` 点 **重新加载**，必要时关掉再点开侧边栏。
+
+## 侧边栏说明（中文 UI）
 
 | 控件 | 作用 |
 |------|------|
 | 快速搜索 | 搜索打开的标签与最近关闭；↑↓ 选择，Enter 激活/重开 |
-| 快捷键 | Ctrl+Shift+K / ⌘⇧K 打开弹窗并聚焦搜索（可在 `chrome://extensions/shortcuts` 修改） |
+| 快捷键 | Ctrl+Shift+K / ⌘⇧K 打开侧边栏（可在 `chrome://extensions/shortcuts` 修改） |
 | Nano 状态 | 显示 available / downloadable / downloading / unavailable / API 缺失 |
 | 下载 Nano | 在可下载时触发 `LanguageModel.create()` |
 | 精确 URL 去重跳转 | 开关去重 |
@@ -82,10 +93,11 @@ smart-tab-pilot/
 │   └── search.js           # 打开/关闭标签快速搜索
 ├── content/
 │   └── extract.js          # 紧凑文本快照抽取
-├── popup/
-│   ├── popup.html
-│   ├── popup.js
-│   └── popup.css
+├── sidepanel/
+│   ├── sidepanel.html      # 侧边栏 UI（主入口）
+│   ├── sidepanel.js
+│   └── sidepanel.css
+├── popup/                  # 旧弹窗（未使用，仅对照）
 └── shared/
     ├── constants.js
     ├── storage.js
@@ -94,9 +106,11 @@ smart-tab-pilot/
 
 ## 权限
 
-- `tabs` / `tabGroups` / `scripting` / `storage` / `sessions`  
+- `tabs` / `tabGroups` / `scripting` / `storage` / `sessions` / **`sidePanel`**  
 - `host_permissions`: `<all_urls>`（用于正文抽取）  
-- `commands`: `_execute_action` → Ctrl+Shift+K / ⌘⇧K
+- `side_panel.default_path`: `sidepanel/sidepanel.html`  
+- `action`：**无** `default_popup`；`setPanelBehavior({ openPanelOnActionClick: true })`  
+- `commands`: `_execute_action` → Ctrl+Shift+K / ⌘⇧K 打开侧边栏
 
 ## 注意事项 / Caveats
 

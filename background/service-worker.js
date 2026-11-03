@@ -1,6 +1,6 @@
 /**
  * Smart Tab Pilot — MV3 service worker.
- * Exact-URL dedupe + semantic grouping + quick search + popup messaging.
+ * Exact-URL dedupe + semantic grouping + quick search + side panel messaging.
  */
 import { MSG } from '../shared/constants.js';
 import { getSettings, saveSettings } from '../shared/storage.js';
@@ -13,8 +13,16 @@ import { activateSearchResult, searchTabs } from './search.js';
 
 initRecentClosedTracking();
 
+/** Open Chrome side panel when the toolbar action (or _execute_action) is clicked. */
+chrome.sidePanel
+  .setPanelBehavior({ openPanelOnActionClick: true })
+  .catch((err) => console.warn('[SmartTabPilot] sidePanel.setPanelBehavior failed', err));
+
 chrome.runtime.onInstalled.addListener(() => {
   console.info('[SmartTabPilot] installed');
+  chrome.sidePanel
+    .setPanelBehavior({ openPanelOnActionClick: true })
+    .catch((err) => console.warn('[SmartTabPilot] sidePanel.setPanelBehavior failed', err));
 });
 
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {

@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Smart Tab Pilot</title>
+  <link rel="stylesheet" href="sidepanel.css" />
+</head>
+<body>
+  <div class="panel">
+    <header class="header">
+      <h1>Smart Tab Pilot</h1>
+      <p class="subtitle">精确去重 · 按正文语义分组（同域不同主题分不同组）</p>
+      <p class="panel-hint">侧边栏面板 · 点击工具栏图标即可打开</p>
+    </header>
+
+    <section class="card search-card" id="search-card" hidden>
+      <div class="card-title">快速搜索 <span class="hint-inline">（可选 / 默认关闭）</span></div>
+      <div class="search-box">
+        <input
+          type="search"
+          id="search-input"
+          placeholder="搜索打开的标签 / 最近关闭…"
+          autocomplete="off"
+          spellcheck="false"
+          aria-label="快速搜索"
+          aria-controls="search-results"
+        />
+        <kbd class="shortcut-hint" title="也可在 chrome://extensions/shortcuts 修改">Ctrl/⌘⇧K</kbd>
+      </div>
+      <div id="search-results" class="search-results" role="listbox" aria-label="搜索结果"></div>
+      <p id="search-empty" class="hint search-empty" hidden>无匹配结果</p>
+    </section>
+
+    <section class="card" id="nano-section">
+      <div class="card-title">Gemini Nano（内置 Prompt API）</div>
+      <div class="status-row">
+        <span class="label">状态</span>
+        <span id="nano-status" class="badge badge-muted">检测中…</span>
+      </div>
+      <p id="nano-detail" class="hint"></p>
+      <button id="btn-download-nano" class="btn btn-primary" hidden>
+        下载 / 启用 Nano 模型
+      </button>
+    </section>
+
+    <section class="card">
+      <div class="card-title">功能开关</div>
+      <label class="toggle">
+        <input type="checkbox" id="toggle-dedupe" />
+        <span>精确 URL 去重跳转</span>
+      </label>
+      <label class="toggle">
+        <input type="checkbox" id="toggle-ignore-hash" />
+        <span>去重时忽略 hash（默认关闭＝含 hash 精确匹配）</span>
+      </label>
+      <label class="toggle">
+        <input type="checkbox" id="toggle-auto-group" />
+        <span>自动语义分组（按正文主题，不按域名）</span>
+      </label>
+      <label class="toggle">
+        <input type="checkbox" id="toggle-quick-search" />
+        <span>启用快速搜索（P1，默认关闭）</span>
+      </label>
+    </section>
+
+    <section class="card">
+      <div class="card-title">自定义模型（OpenAI 兼容）</div>
+      <p class="hint">当 Nano 不可用时使用。填写 Base URL、API Key、模型名。分类按页面主题，不会按网站域名合并标签组。</p>
+      <label class="field">
+        <span>Base URL</span>
+        <input type="url" id="custom-base-url" placeholder="https://api.openai.com/v1" autocomplete="off" />
+      </label>
+      <label class="field">
+        <span>API Key</span>
+        <input type="password" id="custom-api-key" placeholder="sk-…" autocomplete="off" />
+      </label>
+      <label class="field">
+        <span>模型名</span>
+        <input type="text" id="custom-model" placeholder="gpt-4o-mini" autocomplete="off" />
+      </label>
+      <button id="btn-save-custom" class="btn btn-secondary">保存自定义模型</button>
+    </section>
+
+    <section class="card">
+      <button id="btn-group-now" class="btn btn-primary btn-block">立即分组当前窗口</button>
+      <p id="action-result" class="hint result" aria-live="polite"></p>
+    </section>
+
+    <footer class="footer">
+      <span id="fallback-hint" class="hint"></span>
+    </footer>
+  </div>
+
+  <script type="module" src="sidepanel.js"></script>
+</body>
+</html>

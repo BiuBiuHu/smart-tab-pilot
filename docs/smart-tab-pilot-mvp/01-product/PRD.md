@@ -6,12 +6,13 @@
 |------|------|----------|----------|------|
 | v0.1 | 2026-11-03 | 完整 MVP PRD | 目标澄清已冻结；需求验证判定可进 PRD | 进入 awaiting-user-review；约束后续实现与验收 |
 | v0.2 | 2026-11-03 | 硬约束：同域不同主题必须分不同组；搜索默认关闭 | 用户编码批准 + 产品纠偏 | 分类/启发式禁止域名聚合 |
+| v0.3 | 2026-11-03 | 配置 UI 改为 Chrome side panel（占满侧栏），去掉 action popup | 用户反馈弹窗体验差 | manifest `sidePanel` + `sidepanel/` |
 
 ## 1. 当前决策
 
 - 当前产品决策：
   - **MVP 首要成功标准**：精确 URL 去重跳转（激活已有同 URL 标签，关闭新标签）。
-  - **MVP 含**：基于**页面正文**的语义分组（非域名）+ 模型阶梯（Nano → 自备 OpenAI 兼容 → 启发式）+ 文本 DOM 抽取 + 配置弹窗。
+  - **MVP 含**：基于**页面正文**的语义分组（非域名）+ 模型阶梯（Nano → 自备 OpenAI 兼容 → 启发式）+ 文本 DOM 抽取 + **侧边栏配置 UI**（Chrome `sidePanel`，非 popup）。
   - **开源 MIT**；Load unpacked 为首发形态。
 - 被拒绝的替代方案：
   - 以「域名分组」或「固定分类表」作为 MVP 主路径。
@@ -74,7 +75,7 @@
 4. Content Script + 注入回退的紧凑文本抽取（标题、语义主区域、h1–h3、可见正文，去噪，≤~4000 字符）。
 5. 自动语义分组（load complete + debounce）与「立即分组当前窗口」。
 6. 分类写入/合并 `chrome.tabGroups`（标题、颜色循环；合并键仅为语义标签）。
-7. 模型阶梯与弹窗状态：Nano availability、downloadable 用户手势下载、OpenAI 兼容字段、启发式回退提示。
+7. 模型阶梯与侧边栏状态：Nano availability、downloadable 用户手势下载、OpenAI 兼容字段、启发式回退提示。
 8. 设置持久化：`chrome.storage.sync`（含 `quickSearchEnabled` 默认 false）。
 9. README Load unpacked 说明；MIT 许可。
 
@@ -90,7 +91,7 @@
 
 ### 5.3 权限和环境范围
 
-- 权限：`tabs`、`tabGroups`、`scripting`、`storage`；MVP 语义上不依赖搜索，但当前 scaffold 另含 `sessions`（服务于 ahead-of-scope 搜索，审核后决定是否收敛）
+- 权限：`tabs`、`tabGroups`、`scripting`、`storage`、`sidePanel`；MVP 语义上不依赖搜索，但当前 scaffold 另含 `sessions`（服务于 ahead-of-scope 搜索，审核后决定是否收敛）
 - `host_permissions`: `<all_urls>`（正文抽取）
 - 环境：Chrome（支持 MV3；Nano 需较新版本与兼容硬件）
 
@@ -113,7 +114,7 @@
 
 **C. 配置（P0）**
 
-1. 用户打开 action popup。
+1. 用户点击工具栏图标（或快捷键）打开 Chrome side panel。
 2. 查看 Nano 状态；若 downloadable，点击下载（用户手势）。
 3. 切换开关 / 保存自定义模型 / 立即分组。
 
@@ -142,7 +143,7 @@
 |---------|----------|----------|--------|
 | REQ-001 | 同窗口重复打开相同 URL（默认含 hash 一致）时，激活已有标签并关闭新标签；开启 ignoreHash 后仅 hash 不同也去重 | 手工 Chrome 步骤 + 录屏/截图 | P0 |
 | REQ-002 | 自动或「立即分组」后，标签进入以主题命名的 tabGroup；主题来自正文/标题；**同域不同主题必须分到不同组**（禁止域名聚合） | 截图 + 可选分类 source 统计 | P0 |
-| REQ-003 | 弹窗展示 Nano 状态；downloadable 可点下载；无 Nano 时配置自定义模型后分组 source 可为 custom，否则 heuristic 且有提示 | 截图 | P0 |
+| REQ-003 | 侧边栏展示 Nano 状态；downloadable 可点下载；无 Nano 时配置自定义模型后分组 source 可为 custom，否则 heuristic 且有提示 | 截图 | P0 |
 | REQ-004 | 抽取为纯文本快照，长度受上限约束；灵感来源声明不引入 page-agent 依赖 | 代码审查 + 样例页日志 | P0 |
 | REQ-005 | 去重/自动分组开关、ignoreHash、自定义模型保存、立即分组结果文案可用 | 截图 | P0 |
 | REQ-006 | 不作为 MVP 通过条件 | — | P1 |
