@@ -1,0 +1,15 @@
+{
+  "name": "smart-tab-pilot",
+  "version": "1.1.0",
+  "private": true,
+  "description": "Chrome MV3: exact URL dedupe, semantic tab groups, quick search",
+  "license": "MIT",
+  "scripts": {},
+  "keywords": [
+    "chrome-extension",
+    "manifest-v3",
+    "tab-groups",
+    "gemini-nano",
+    "prompt-api"
+  ]
+}
