@@ -1,11 +1,12 @@
 {
   "name": "smart-tab-pilot",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "private": true,
   "description": "Chrome MV3: exact URL dedupe (cross-window) + task navigation graph grouping; optional quick search",
   "license": "MIT",
   "scripts": {
-    "test": "node --test tests/*.test.mjs"
+    "test": "node --test tests/*.test.mjs",
+    "pack": "node scripts/pack-extension.mjs"
   },
   "keywords": [
     "chrome-extension",

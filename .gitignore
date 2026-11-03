@@ -1,0 +1,4 @@
+node_modules/
+artifacts/*.zip
+artifacts/.pack-stage-*
+.DS_Store

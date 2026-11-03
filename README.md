@@ -114,8 +114,11 @@ smart-tab-pilot/
 │   ├── sidepanel.js
 │   └── sidepanel.css
 ├── docs/
+│   ├── chrome-web-store/             # 商店文案 / 权限 / 隐私草稿
 │   ├── smart-tab-pilot-mvp/          # MVP 门禁文档
 │   └── task-graph-cross-window/      # 任务导航图 + 跨窗口
+├── scripts/
+│   └── pack-extension.mjs            # npm run pack → artifacts/*.zip
 ├── popup/                  # 旧弹窗（未使用，仅对照）
 └── shared/
     ├── i18n.js             # 侧栏 zh/en 文案 + t()
@@ -160,6 +163,19 @@ smart-tab-pilot/
 ## License
 
 [MIT](./LICENSE)
+
+## Chrome Web Store 打包
+
+不要把 zip 提交进 git。在仓库根目录：
+
+```bash
+npm test
+npm run pack
+```
+
+产物：`artifacts/smart-tab-pilot-<manifest.version>.zip`（当前为 `artifacts/smart-tab-pilot-1.5.0.zip`）。只含 MV3 运行时：`manifest.json`、`background/`、`sidepanel/`、`shared/`、`content/`、`icons/`、`_locales/`、`LICENSE`。不含 `tests/`、`docs/`、`.git/`、`node_modules/`、`popup/`。
+
+商店文案、权限理由与隐私政策草稿见 `docs/chrome-web-store/`。本仓库不代为登录开发者后台。
 
 ## 开发自检
 
