@@ -78,7 +78,8 @@ describe('sidepanel HTML: settings page vs task surface', () => {
     assert.match(settings, /返回任务视图/);
     assert.match(settings, /id="feature-toggles"/);
     assert.match(settings, /功能开关/);
-    assert.match(settings, /id="scope-all"/);
+    assert.doesNotMatch(settings, /id="scope-all"/);
+    assert.doesNotMatch(settings, /全部窗口/);
     assert.match(settings, /id="toggle-dedupe"/);
     assert.match(settings, /id="nano-section"/);
     assert.match(settings, /Gemini Nano/);
@@ -86,6 +87,10 @@ describe('sidepanel HTML: settings page vs task surface', () => {
     assert.match(settings, /id="custom-base-url"/);
     assert.match(task, /id="btn-group-now"/);
     assert.match(task, /id="btn-refresh-tasks"/);
+    assert.match(task, /id="scope-all"/);
+    assert.match(task, /id="scope-current"/);
+    assert.match(task, /全部窗口/);
+    assert.match(task, /仅当前窗口/);
     assert.match(task, /任务视图/);
     assert.doesNotMatch(task, /Gemini Nano/);
     assert.doesNotMatch(task, /Prompt API/);
