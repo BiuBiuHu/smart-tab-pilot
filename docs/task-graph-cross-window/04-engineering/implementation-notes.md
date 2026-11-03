@@ -55,12 +55,12 @@ Chrome `tabs.Tab` **没有** `createdAt`，时间边只使用本扩展观察到�
 
 后续可以在不改聚类主循环的前提下接入：拖拽并组、负反馈衰减、按窗口的 prior。
 
-## 5. 「立即整理」失败软化
+## 5. 「立即整理」两阶段（不全量放弃）
 
-- 批量整理**不再**对所有标签串行 `sendMessage` + `classifyPage`。任务簇先用 lineage / 缓存 / 标题启发式。
-- 最多 `LABEL_REFRESH_BATCH`（6）个未缓存页并行抽取（并发 3），单页 `EXTRACT_TIMEOUT_MS`（2s）超时则回退标题启发式。
-- `extractPageContent` / 单标签 `classifyPage` 均 `Promise.race` 超时，受限页或挂死的 content script 不会卡住 SW。
-- 侧栏 `send` 有 `GROUP_RPC_TIMEOUT_MS`（20s）硬超时；`onGroupNow` 的 `finally` 一定恢复按钮。进度文案：`已处理 n/N`。
+- **Pass 1（快）**：全部合格标签用 lineage / 缓存 / 标题启发式建任务图并立刻物理进组。
+- **Pass 2（全量精炼）**：每一个未缓存合格标签都进入队列（`listUncachedEligibleTabs`，**无 6 页上限**），并发 3；单页抽取 2s 超时则该页回退启发式并继续。`chrome://` 不入队。
+- 进度：`已处理 n/N` + 进度条，直到 `n=N`；每 6 页可回写组名。
+- 按钮在全程可保持忙碌，但进度必须更新；`finally` 或 12s 无心跳则恢复按钮。
 
 ## 6. 验证命令
 

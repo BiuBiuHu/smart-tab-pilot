@@ -38,10 +38,12 @@ export const LABEL_CACHE_KEY = 'taskLabelCache';
 /** Per-tab extract / classify must fail-soft so 「立即整理」 cannot hang. */
 export const EXTRACT_TIMEOUT_MS = 2000;
 export const CLASSIFY_TIMEOUT_MS = 2500;
-/** Side panel RPC backstop (button always re-enables). */
+/** First-pass GROUP_TABS (quick cluster) backstop. Refine uses progress + stall. */
 export const GROUP_RPC_TIMEOUT_MS = 20_000;
-/** Max full extracts during batch 「立即整理」; rest use cache / title heuristic. */
-export const LABEL_REFRESH_BATCH = 6;
+/** No progress heartbeat for this long → treat refine as stalled and recover the button. */
+export const REFINE_STALL_MS = 12_000;
+/** Relabel physical groups every N refined tabs (not a stop cap). */
+export const LABEL_REFRESH_RELABEL_EVERY = 6;
 export const LABEL_REFRESH_CONCURRENCY = 3;
 
 /** Typed edge weights (documentation + feedback deltas). */
@@ -111,4 +113,5 @@ export const MSG = {
   SEARCH_TABS: 'SEARCH_TABS',
   ACTIVATE_SEARCH_RESULT: 'ACTIVATE_SEARCH_RESULT',
   GROUP_PROGRESS: 'GROUP_PROGRESS',
+  GROUP_REFINE_DONE: 'GROUP_REFINE_DONE',
 };

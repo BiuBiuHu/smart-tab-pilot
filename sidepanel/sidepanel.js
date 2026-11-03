@@ -2,7 +2,7 @@
  * Side panel UI — 任务导航图视图 + 中文开关；快速搜索默认关闭。
  */
 import { withDeadline } from '../shared/async-timeout.js';
-import { GROUP_RPC_TIMEOUT_MS, MSG } from '../shared/constants.js';
+import { GROUP_RPC_TIMEOUT_MS, MSG, REFINE_STALL_MS } from '../shared/constants.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -25,6 +25,9 @@ const scopeCurrent = $('scope-current');
 const taskClustersEl = $('task-clusters');
 const taskEmpty = $('task-empty');
 const actionResult = $('action-result');
+const groupProgressEl = $('group-progress');
+const groupProgressFill = $('group-progress-fill');
+const groupProgressText = $('group-progress-text');
 const fallbackHint = $('fallback-hint');
 const searchInput = $('search-input');
 const searchResults = $('search-results');
@@ -558,23 +561,70 @@ async function sendFeedback(action, a, b) {
   }
 }
 
+/** @param {number} done @param {number} total @param {string} [phase] */
+function updateGroupProgress(done, total, phase) {
+  if (!groupProgressEl) return;
+  groupProgressEl.hidden = false;
+  const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
+  if (groupProgressFill) groupProgressFill.style.width = `${pct}%`;
+  if (groupProgressText) {
+    if (phase === 'quick') {
+      groupProgressText.textContent =
+        total > 0 ? `已快速成组，正在精炼标题 0/${total}` : '已快速成组，无需精炼';
+    } else {
+      groupProgressText.textContent = `已处理 ${done}/${total}`;
+    }
+  }
+}
+
+function hideGroupProgress() {
+  if (groupProgressEl) groupProgressEl.hidden = true;
+  if (groupProgressFill) groupProgressFill.style.width = '0%';
+}
+
 async function onGroupNow() {
   btnGroupNow.disabled = true;
+  hideGroupProgress();
   actionResult.textContent = allWindowsView
-    ? '正在按任务导航图整理全部窗口…'
-    : '正在按任务导航图整理当前窗口…';
+    ? '正在快速成组（全部窗口）…'
+    : '正在快速成组（当前窗口）…';
 
+  let lastBeat = Date.now();
   const onProgress = (message) => {
     if (message?.type !== MSG.GROUP_PROGRESS) return;
+    lastBeat = Date.now();
     const done = Number(message.payload?.done) || 0;
     const total = Number(message.payload?.total) || 0;
-    if (total > 0) actionResult.textContent = `已处理 ${done}/${total}…`;
+    const phase = message.payload?.phase || 'refine';
+    updateGroupProgress(done, total, phase);
+    if (phase === 'quick') {
+      actionResult.textContent =
+        total > 0 ? `已快速成组，正在精炼全部未缓存页（0/${total}）…` : '已快速成组。';
+      void refreshTaskView();
+    } else if (total > 0) {
+      actionResult.textContent = `已处理 ${done}/${total}…`;
+    }
   };
   chrome.runtime.onMessage.addListener(onProgress);
 
+  let aborted = false;
+  const stall = setInterval(() => {
+    if (Date.now() - lastBeat <= REFINE_STALL_MS) return;
+    aborted = true;
+    actionResult.textContent = '精炼进度中断，请重试。按钮已恢复。';
+    chrome.runtime.onMessage.removeListener(onProgress);
+    clearInterval(stall);
+    btnGroupNow.disabled = false;
+  }, 1000);
+
   let groupedOk = false;
   try {
-    const res = await send(MSG.GROUP_TABS, { allWindows: allWindowsView }, GROUP_RPC_TIMEOUT_MS);
+    // No hard 20s cap on the whole job — progress + stall recover the button.
+    const res = await chrome.runtime.sendMessage({
+      type: MSG.GROUP_TABS,
+      payload: { allWindows: allWindowsView },
+    });
+    if (aborted) return;
     if (!res?.ok) {
       actionResult.textContent = `整理失败：${res?.error || '未知错误'}`;
       return;
@@ -584,13 +634,22 @@ async function onGroupNow() {
           .map(([k, v]) => `${sourceZh(k)}×${v}`)
           .join('，')
       : '';
-    actionResult.textContent = `已整理 ${res.grouped || 0} 个标签 / ${ (res.clusters || []).length } 个任务（${(res.labels || []).join('、') || '无'}）${src ? '；主题来源：' + src : ''}`;
+    const refined = res.refined || 0;
+    summary = `已整理 ${res.grouped || 0} 个标签 / ${(res.clusters || []).length} 个任务`;
+    if (refined) summary += `；精炼 ${refined}/${refined}`;
+    if ((res.labels || []).length) summary += `（${res.labels.join('、')}）`;
+    if (src) summary += `；主题来源：${src}`;
+    actionResult.textContent = summary;
+    if (refined > 0) updateGroupProgress(refined, refined, 'done');
     groupedOk = true;
   } catch (err) {
-    actionResult.textContent = err instanceof Error ? err.message : String(err);
+    if (!aborted) {
+      actionResult.textContent = err instanceof Error ? err.message : String(err);
+    }
   } finally {
+    clearInterval(stall);
     chrome.runtime.onMessage.removeListener(onProgress);
-    btnGroupNow.disabled = false;
+    if (!aborted) btnGroupNow.disabled = false;
   }
   if (groupedOk) {
     try {

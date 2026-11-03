@@ -8,14 +8,15 @@ import {
   EXTRACT_TIMEOUT_MS,
   GROUP_COLORS,
   LABEL_CACHE_KEY,
-  LABEL_REFRESH_BATCH,
   LABEL_REFRESH_CONCURRENCY,
+  LABEL_REFRESH_RELABEL_EVERY,
   MAX_BODY_CHARS,
   MSG,
   TIME_ADJACENCY_MS,
 } from '../shared/constants.js';
 import { heuristicLabel, sanitizeLabel } from '../shared/label-utils.js';
 import { getSettings } from '../shared/storage.js';
+import { listUncachedEligibleTabs } from '../shared/refine-queue.js';
 import { buildTaskClusters } from '../shared/task-graph.js';
 import { shouldSkipUrl } from '../shared/url-utils.js';
 import { classifyPage } from './classifier.js';
@@ -380,13 +381,12 @@ export function scheduleAutoGroup(tabId) {
 }
 
 /**
- * @param {number} done
- * @param {number} total
+ * @param {Record<string, unknown>} payload
  */
-function broadcastGroupProgress(done, total) {
+function broadcastGroupProgress(payload) {
   try {
     chrome.runtime.sendMessage(
-      { type: MSG.GROUP_PROGRESS, payload: { done, total } },
+      { type: MSG.GROUP_PROGRESS, payload },
       () => void chrome.runtime.lastError,
     );
   } catch {
@@ -395,26 +395,30 @@ function broadcastGroupProgress(done, total) {
 }
 
 /**
- * Timed extract + title/body heuristic for a small uncached batch.
- * Skips discarded / restricted pages. Does not call Nano on the batch path.
+ * Timed extract + title/body heuristic for EVERY uncached eligible tab.
+ * One hung page fails soft and the queue continues. chrome:// never enters.
  * @param {chrome.tabs.Tab[]} tabs
  * @param {import('../shared/task-graph.js').TaskNode[]} nodes
- * @param {{ cap: number, concurrency: number, onProgress?: (done: number, total: number) => void }} opts
+ * @param {{
+ *   concurrency: number,
+ *   relabelEvery?: number,
+ *   onProgress?: (p: { done: number, total: number, phase: string }) => void,
+ *   onRelabel?: (nodes: import('../shared/task-graph.js').TaskNode[]) => Promise<void>,
+ * }} opts
  */
 async function refreshUncachedLabels(tabs, nodes, opts) {
   const byId = new Map(nodes.map((n) => [n.id, n]));
-  const candidates = (tabs || []).filter((t) => {
-    if (t.id == null || shouldSkipUrl(t.url)) return false;
-    if (t.discarded) return false;
-    return !labelCache.has(t.id);
-  }).slice(0, opts.cap);
-
+  const candidates = listUncachedEligibleTabs(tabs, labelCache.keys());
   const total = candidates.length;
-  if (!total) return;
-  opts.onProgress?.(0, total);
+  if (!total) return { done: 0, total: 0 };
+  opts.onProgress?.({ done: 0, total, phase: 'refine' });
 
   let cursor = 0;
   let done = 0;
+  let sinceRelabel = 0;
+  let relabelChain = Promise.resolve();
+  const relabelEvery = opts.relabelEvery ?? LABEL_REFRESH_RELABEL_EVERY;
+
   const worker = async () => {
     while (cursor < candidates.length) {
       const tab = candidates[cursor];
@@ -435,16 +439,28 @@ async function refreshUncachedLabels(tabs, nodes, opts) {
           node.source = labeled.source;
         }
       } catch {
-        /* keep existing heuristic on the node */
+        if (tab.id != null && !labelCache.has(tab.id)) {
+          const fallback = titleHeuristic(tab);
+          labelCache.set(tab.id, fallback);
+        }
       }
       done += 1;
-      opts.onProgress?.(done, total);
+      sinceRelabel += 1;
+      opts.onProgress?.({ done, total, phase: 'refine' });
+      if (opts.onRelabel && sinceRelabel >= relabelEvery) {
+        sinceRelabel = 0;
+        relabelChain = relabelChain
+          .then(() => opts.onRelabel(nodes))
+          .catch((err) => console.warn('[SmartTabPilot] mid-refine relabel failed', err));
+        await relabelChain;
+      }
     }
   };
 
   const n = Math.min(opts.concurrency, candidates.length);
   await Promise.all(Array.from({ length: n }, () => worker()));
   void persistLabelCache();
+  return { done, total };
 }
 
 /**
@@ -463,17 +479,40 @@ export async function groupTabs(opts = {}) {
     tabs = await chrome.tabs.query({});
   }
 
-  // Clustering is task-graph primary: cache / title heuristic first.
-  // Only a small uncached batch gets a timed extract (never hang on sendMessage).
+  // Pass 1: task graph for ALL eligible tabs (lineage / cache / title heuristic).
   const nodes = await nodesFromTabs(tabs, { fullExtract: false });
-  await refreshUncachedLabels(tabs, nodes, {
-    cap: LABEL_REFRESH_BATCH,
-    concurrency: LABEL_REFRESH_CONCURRENCY,
-    onProgress: broadcastGroupProgress,
-  });
-  const clusters = await clusterNodes(nodes);
+  let clusters = await clusterNodes(nodes);
   if (applyPhysical) {
     await applyPhysicalGroups(clusters, nodes);
+  }
+
+  const refineTotal = listUncachedEligibleTabs(tabs, labelCache.keys()).length;
+  broadcastGroupProgress({
+    done: 0,
+    total: refineTotal,
+    phase: 'quick',
+    grouped: nodes.length,
+    clusterCount: clusters.length,
+  });
+
+  // Pass 2: timed extract for every remaining uncached tab (no abandon cap).
+  if (refineTotal > 0) {
+    await refreshUncachedLabels(tabs, nodes, {
+      concurrency: LABEL_REFRESH_CONCURRENCY,
+      relabelEvery: LABEL_REFRESH_RELABEL_EVERY,
+      onProgress: (p) => broadcastGroupProgress(p),
+      onRelabel: applyPhysical
+        ? async (fresh) => {
+            const next = await clusterNodes(fresh);
+            await applyPhysicalGroups(next, fresh);
+          }
+        : undefined,
+    });
+    clusters = await clusterNodes(nodes);
+    if (applyPhysical) {
+      await applyPhysicalGroups(clusters, nodes);
+    }
+    broadcastGroupProgress({ done: refineTotal, total: refineTotal, phase: 'done' });
   }
 
   const sources = nodes.reduce((acc, n) => {
@@ -485,6 +524,7 @@ export async function groupTabs(opts = {}) {
   return {
     ok: true,
     grouped: nodes.length,
+    refined: refineTotal,
     labels: [...new Set(clusters.map((c) => c.label))],
     sources,
     clusters,

@@ -138,6 +138,7 @@ async function handleMessage(message, sender) {
     }
 
     case MSG.GROUP_PROGRESS:
+    case MSG.GROUP_REFINE_DONE:
       return { ok: true };
 
     default:
