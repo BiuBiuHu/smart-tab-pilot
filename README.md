@@ -1,6 +1,6 @@
 # Smart Tab Pilot
 
-Manifest V3 Chrome 扩展：**精确 URL 去重跳转** + **基于页面正文的语义标签分组** + **快速搜索（打开 / 最近关闭）**。
+Manifest V3 Chrome 扩展：**精确 URL 去重跳转** + **基于页面正文的语义标签分组**（同域不同主题分不同组，不按域名聚合）。快速搜索为可选能力（弹窗默认关闭）。
 
 纯前端 JS，无需构建步骤；可直接「加载已解压的扩展程序」。开源协议：[MIT](./LICENSE)。
 
@@ -14,7 +14,8 @@ Manifest V3 Chrome 扩展：**精确 URL 去重跳转** + **基于页面正文�
 
 2. **语义分组（按页面正文，而非域名）**  
    - Content Script 抽取紧凑的**文本 DOM 快照**（标题 + 语义主区域 + h1–h3 + 可见正文，去掉导航/页脚噪音，硬上限约 4000 字符）。  
-   - Background 用 AI 打出短中/英文主题标签，并放入对应的 `chrome.tabGroups`（自动创建/重命名/着色）。
+   - Background 用 AI / 启发式打出短中/英文**主题**标签，并放入对应的 `chrome.tabGroups`（按标签名合并；**禁止**用 hostname/站点名并组）。  
+   - **同域名下不同主题必须进入不同组。**
 
 3. **模型策略**  
    - 优先 Chrome 内置 Prompt API `LanguageModel`（Gemini Nano）。  
@@ -23,11 +24,9 @@ Manifest V3 Chrome 扩展：**精确 URL 去重跳转** + **基于页面正文�
    - `unavailable` 或 API 缺失：可配置 OpenAI 兼容接口（Base URL / API Key / 模型名，存 `chrome.storage.sync`）。  
    - 仍无模型时：仅用标题+摘要的关键词启发式，并在弹窗提示状态。
 
-4. **快速搜索**  
-   - 按标题 / URL 搜索当前打开的标签页。  
-   - 搜索最近关闭的标签：通过 `tabs.onRemoved` 自行记录到 `chrome.storage.local`（上限 200）；并合并 `chrome.sessions.getRecentlyClosed`（需 `sessions` 权限）。  
-   - 弹窗顶部搜索框；快捷键 **Ctrl+Shift+K**（macOS：**⌘⇧K**）打开弹窗并聚焦搜索（`commands._execute_action`）。  
-   - 点击结果：已打开 → 激活该标签；已关闭 → 重新打开 URL。支持 ↑↓ / Enter。
+4. **快速搜索（P1 / 可选，默认关闭）**  
+   - 在弹窗「功能开关」中启用后可用。  
+   - 按标题 / URL 搜索打开的标签与最近关闭记录；快捷键 **Ctrl+Shift+K** / **⌘⇧K** 打开弹窗。
 
 ## 如何加载（Load unpacked）
 
@@ -119,3 +118,11 @@ smart-tab-pilot/
 ## License
 
 [MIT](./LICENSE)
+
+## 开发自检
+
+```bash
+npm test
+```
+
+手工清单见 `docs/smart-tab-pilot-mvp/05-testing/manual-checklist.md`。

@@ -9,11 +9,11 @@
 <body>
   <header class="header">
     <h1>Smart Tab Pilot</h1>
-    <p class="subtitle">精确去重 · 语义分组 · 快速搜索</p>
+    <p class="subtitle">精确去重 · 按正文语义分组（同域不同主题分不同组）</p>
   </header>
 
-  <section class="card search-card">
-    <div class="card-title">快速搜索</div>
+  <section class="card search-card" id="search-card" hidden>
+    <div class="card-title">快速搜索 <span class="hint-inline">（可选 / 默认关闭）</span></div>
     <div class="search-box">
       <input
         type="search"
@@ -54,13 +54,17 @@
     </label>
     <label class="toggle">
       <input type="checkbox" id="toggle-auto-group" />
-      <span>自动语义分组</span>
+      <span>自动语义分组（按正文主题，不按域名）</span>
+    </label>
+    <label class="toggle">
+      <input type="checkbox" id="toggle-quick-search" />
+      <span>启用快速搜索（P1，默认关闭）</span>
     </label>
   </section>
 
   <section class="card">
     <div class="card-title">自定义模型（OpenAI 兼容）</div>
-    <p class="hint">当 Nano 不可用时使用。填写 Base URL、API Key、模型名。</p>
+    <p class="hint">当 Nano 不可用时使用。填写 Base URL、API Key、模型名。分类按页面主题，不会按网站域名合并标签组。</p>
     <label class="field">
       <span>Base URL</span>
       <input type="url" id="custom-base-url" placeholder="https://api.openai.com/v1" autocomplete="off" />

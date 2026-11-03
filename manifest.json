@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Smart Tab Pilot",
-  "version": "1.1.0",
-  "description": "精确 URL 去重跳转 + 语义标签分组 + 快速搜索（打开/最近关闭）",
+  "version": "1.2.0",
+  "description": "精确 URL 去重跳转 + 按页面正文语义分组（同域不同主题分不同组）；可选快速搜索",
   "permissions": [
     "tabs",
     "tabGroups",
@@ -44,8 +44,13 @@
   },
   "content_scripts": [
     {
-      "matches": ["http://*/*", "https://*/*"],
-      "js": ["content/extract.js"],
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content/extract.js"
+      ],
       "run_at": "document_idle"
     }
   ]

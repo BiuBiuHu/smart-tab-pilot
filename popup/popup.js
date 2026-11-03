@@ -1,5 +1,5 @@
 /**
- * Popup UI — Chinese strings; quick search + settings.
+ * Popup UI — Chinese strings; MVP toggles + optional quick search (default off).
  */
 import { MSG } from '../shared/constants.js';
 
@@ -11,6 +11,8 @@ const btnDownload = $('btn-download-nano');
 const toggleDedupe = $('toggle-dedupe');
 const toggleIgnoreHash = $('toggle-ignore-hash');
 const toggleAutoGroup = $('toggle-auto-group');
+const toggleQuickSearch = $('toggle-quick-search');
+const searchCard = $('search-card');
 const customBaseUrl = $('custom-base-url');
 const customApiKey = $('custom-api-key');
 const customModel = $('custom-model');
@@ -35,14 +37,17 @@ const AVAIL_LABELS = {
 let flatResults = [];
 let activeIndex = -1;
 let searchTimer = 0;
+let quickSearchOn = false;
 
 init();
 
 async function init() {
   bind();
-  // Focus search first (Ctrl/Cmd+Shift+K opens popup via _execute_action)
-  searchInput.focus();
-  await Promise.all([refreshNano(), loadSettings(), runSearch('')]);
+  await Promise.all([refreshNano(), loadSettings()]);
+  if (quickSearchOn) {
+    searchInput.focus();
+    await runSearch('');
+  }
 }
 
 function bind() {
@@ -56,10 +61,19 @@ function bind() {
   toggleAutoGroup.addEventListener('change', () =>
     savePartial({ autoSemanticGroupEnabled: toggleAutoGroup.checked }),
   );
+  toggleQuickSearch.addEventListener('change', async () => {
+    await savePartial({ quickSearchEnabled: toggleQuickSearch.checked });
+    applyQuickSearchVisibility(toggleQuickSearch.checked);
+    if (toggleQuickSearch.checked) {
+      searchInput.focus();
+      await runSearch(searchInput.value || '');
+    }
+  });
   btnSaveCustom.addEventListener('click', onSaveCustom);
   btnGroupNow.addEventListener('click', onGroupNow);
 
   searchInput.addEventListener('input', () => {
+    if (!quickSearchOn) return;
     clearTimeout(searchTimer);
     searchTimer = setTimeout(() => runSearch(searchInput.value), 80);
   });
@@ -67,11 +81,18 @@ function bind() {
   searchResults.addEventListener('click', onResultsClick);
 }
 
+/** @param {boolean} enabled */
+function applyQuickSearchVisibility(enabled) {
+  quickSearchOn = !!enabled;
+  if (searchCard) searchCard.hidden = !quickSearchOn;
+}
+
 async function send(type, payload) {
   return chrome.runtime.sendMessage({ type, payload });
 }
 
 async function runSearch(query) {
+  if (!quickSearchOn) return;
   try {
     const res = await send(MSG.SEARCH_TABS, { query, limit: 30 });
     renderResults(res?.open || [], res?.closed || []);
@@ -169,6 +190,7 @@ function onResultsClick(ev) {
 
 /** @param {KeyboardEvent} ev */
 function onSearchKeydown(ev) {
+  if (!quickSearchOn) return;
   if (!flatResults.length) {
     if (ev.key === 'Escape') {
       searchInput.value = '';
@@ -247,13 +269,13 @@ function statusHint(avail) {
   switch (avail) {
     case 'available':
     case 'readily':
-      return '将优先使用设备端 Gemini Nano 做主题分类。';
+      return '将优先使用设备端 Gemini Nano，按页面正文主题分类（同网站不同主题会进不同组）。';
     case 'downloadable':
       return '模型尚未下载。请点击下方按钮（需用户手势）触发下载。';
     case 'downloading':
       return '模型正在下载，请稍候再试。';
     case 'unavailable':
-      return '当前环境无法使用 Nano。可配置下方自定义模型，或使用关键词启发式。';
+      return '当前环境无法使用 Nano。可配置下方自定义模型，或使用正文/标题启发式（不会按域名合并）。';
     case 'missing':
       return '浏览器未暴露 LanguageModel。请使用支持 Prompt API 的 Chrome（实验旗标 / 足够新的版本）。';
     default:
@@ -269,9 +291,10 @@ function updateFallbackHint(avail) {
   }
   const hasCustom = !!(customBaseUrl.value && customApiKey.value);
   if (hasCustom) {
-    fallbackHint.textContent = '当前将使用自定义 OpenAI 兼容接口分类。';
+    fallbackHint.textContent = '当前将使用自定义 OpenAI 兼容接口按主题分类（非域名）。';
   } else {
-    fallbackHint.textContent = '无可用模型时，将仅用标题/摘要关键词启发式分组，并在此提示。';
+    fallbackHint.textContent =
+      '无可用模型时，将仅用标题/正文关键词启发式分组（不会用域名作为组名），并在此提示。';
   }
 }
 
@@ -300,6 +323,8 @@ async function loadSettings() {
   toggleDedupe.checked = s.exactDedupeEnabled !== false;
   toggleIgnoreHash.checked = s.ignoreHash === true;
   toggleAutoGroup.checked = s.autoSemanticGroupEnabled !== false;
+  toggleQuickSearch.checked = s.quickSearchEnabled === true;
+  applyQuickSearchVisibility(toggleQuickSearch.checked);
   customBaseUrl.value = s.customBaseUrl || '';
   customApiKey.value = s.customApiKey || '';
   customModel.value = s.customModel || 'gpt-4o-mini';
@@ -328,7 +353,7 @@ async function onSaveCustom() {
 
 async function onGroupNow() {
   btnGroupNow.disabled = true;
-  actionResult.textContent = '正在分组…';
+  actionResult.textContent = '正在按正文主题分组…';
   try {
     const res = await send(MSG.GROUP_CURRENT_WINDOW);
     if (!res?.ok) {
