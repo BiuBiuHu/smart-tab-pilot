@@ -22,6 +22,8 @@
 | TC-TASK-04 | 从 issue 点开 docs，关标签后再开同类 issue+docs | 第二次更可能并成一任务（学习边） |
 | TC-TASK-05 | 把「批量发奖demo」任务卡拖到「Bettr Promotion」上（自动化：`tests/drag-merge.test.mjs`） | 任意一对合并（不限上一张）；反馈 +0.35；拆分仍可用 |
 | TC-TASK-06 | 「拆成独立任务」 | 会话内不再并回 |
+| TC-TASK-11 | 任务卡「关闭本组」（自动化：`tests/close-group.test.mjs`） | 全部窗口关该逻辑任务全部标签；仅当前窗口只关本窗；已关闭 id 跳过；会话 tabId 边清除；面板刷新 |
+| TC-UI-01 | 标题栏右上角「设置」（自动化：`tests/settings-panel.test.mjs`） | Nano / 自定义模型只在展开的设置面板里；主表面不再平铺 |
 | TC-TASK-07 | 同端口 `127.0.0.1` 多个 demo | 无模型时不靠 regex 硬并；有 Nano/自定义且摘要同类 → 一个任务 |
 | TC-TASK-08 | Unio + Marmot + Marketing console + `ac.alipay.com/page/bettr-promotion`（可跨窗） | 侧栏 **一个**「Bettr Promotion」（不要 Unio/Marketing 分簇）。**不是因为窗口才拆开** |
 | TC-TASK-09 | 同窗已有「LinkE」组，再整理相邻同名标签 | **仍只有一个**「LinkE」物理组；「BIGP一期 迭代」同理，不得并排两个同名组 |

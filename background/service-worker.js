@@ -7,6 +7,7 @@ import { getSettings, saveSettings } from '../shared/storage.js';
 import { shouldSkipUrl } from '../shared/url-utils.js';
 import { downloadNano, getNanoStatus } from './classifier.js';
 import { handleExactDedupe } from './dedupe.js';
+import { closeTaskGroup } from './close-group.js';
 import {
   applyNavHint,
   applyPhysicalFromCurrentGraph,
@@ -118,6 +119,10 @@ async function handleMessage(message, sender) {
     case MSG.GET_TASK_VIEW: {
       const allWindows = message.payload?.allWindows !== false;
       return await getTaskView({ allWindows });
+    }
+
+    case MSG.CLOSE_TASK_GROUP: {
+      return await closeTaskGroup(message.payload || {});
     }
 
     case MSG.TASK_FEEDBACK: {

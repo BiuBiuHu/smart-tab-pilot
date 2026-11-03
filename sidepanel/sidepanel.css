@@ -44,7 +44,20 @@ body {
 }
 
 .header {
+  position: relative;
   padding: 20px 20px 12px;
+}
+
+.header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.header-text {
+  min-width: 0;
+  flex: 1;
 }
 
 .header h1 {
@@ -52,6 +65,49 @@ body {
   font-size: 20px;
   font-weight: 650;
   letter-spacing: 0.02em;
+}
+
+.btn-settings {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  margin-top: 2px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--text);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.btn-settings:hover,
+.btn-settings[aria-expanded='true'] {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.btn-settings-icon {
+  display: block;
+}
+
+.settings-panel {
+  margin-top: 12px;
+  padding: 14px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.settings-panel[hidden] {
+  display: none;
+}
+
+.settings-block + .settings-block {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
 }
 
 .subtitle {
@@ -386,8 +442,18 @@ body {
 
 .task-cluster-head {
   display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.task-cluster-head-text {
+  display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
+  flex: 1;
 }
 
 .task-cluster-title {
@@ -419,6 +485,12 @@ body {
 
 .btn-text:hover {
   text-decoration: underline;
+}
+
+.btn-close-group {
+  color: var(--danger);
+  flex-shrink: 0;
+  line-height: 1.4;
 }
 
 .drag-hint {

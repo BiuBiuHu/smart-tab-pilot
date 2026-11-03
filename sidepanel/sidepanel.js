@@ -3,6 +3,12 @@
  */
 import { withDeadline } from '../shared/async-timeout.js';
 import { GROUP_RPC_TIMEOUT_MS, MSG, REFINE_STALL_MS } from '../shared/constants.js';
+import { buildCloseGroupPayload } from '../shared/close-group.js';
+import {
+  isSettingsOutsideClick,
+  nextSettingsOpen,
+  settingsPanelView,
+} from '../shared/settings-panel.js';
 import {
   buildTaskFeedbackPayload,
   consumeDragClickSuppress,
@@ -36,6 +42,8 @@ const groupProgressEl = $('group-progress');
 const groupProgressFill = $('group-progress-fill');
 const groupProgressText = $('group-progress-text');
 const fallbackHint = $('fallback-hint');
+const btnSettings = $('btn-settings');
+const settingsPanelEl = $('settings-panel');
 const searchInput = $('search-input');
 const searchResults = $('search-results');
 const searchEmpty = $('search-empty');
@@ -57,6 +65,9 @@ let quickSearchOn = false;
 /** @type {{ id: string, label: string, tabs: any[], edges?: any }[]} */
 let viewClusters = [];
 let allWindowsView = true;
+/** @type {number | null} */
+let viewCurrentWindowId = null;
+let settingsOpen = false;
 
 init();
 
@@ -90,6 +101,24 @@ function bind() {
     }
   });
   btnSaveCustom.addEventListener('click', onSaveCustom);
+  btnSettings?.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    setSettingsOpen(nextSettingsOpen(settingsOpen, 'toggle'));
+  });
+  document.addEventListener('click', (ev) => {
+    if (!settingsOpen) return;
+    const outside = isSettingsOutsideClick({
+      toggleContains: Boolean(btnSettings?.contains(ev.target)),
+      panelContains: Boolean(settingsPanelEl?.contains(ev.target)),
+    });
+    if (outside) setSettingsOpen(nextSettingsOpen(settingsOpen, 'outside'));
+  });
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Escape' && settingsOpen) {
+      setSettingsOpen(nextSettingsOpen(settingsOpen, 'escape'));
+    }
+  });
+  applySettingsPanel();
   btnGroupNow.addEventListener('click', onGroupNow);
   btnRefreshTasks.addEventListener('click', () => void refreshTaskView());
   scopeAll.addEventListener('change', onScopeChange);
@@ -120,6 +149,22 @@ function bind() {
 }
 
 /** @param {boolean} enabled */
+function setSettingsOpen(open) {
+  settingsOpen = Boolean(open);
+  applySettingsPanel();
+}
+
+function applySettingsPanel() {
+  const view = settingsPanelView(settingsOpen);
+  if (settingsPanelEl) settingsPanelEl.hidden = view.hidden;
+  if (btnSettings) {
+    btnSettings.title = view.trigger.title;
+    btnSettings.setAttribute('aria-label', view.trigger['aria-label']);
+    btnSettings.setAttribute('aria-expanded', view.trigger['aria-expanded']);
+    btnSettings.setAttribute('aria-controls', view.trigger['aria-controls']);
+  }
+}
+
 function applyQuickSearchVisibility(enabled) {
   quickSearchOn = !!enabled;
   if (searchCard) searchCard.hidden = !quickSearchOn;
@@ -421,6 +466,7 @@ async function refreshTaskView() {
 /** @param {any} res */
 function renderTaskView(res) {
   viewClusters = res?.clusters || [];
+  viewCurrentWindowId = res?.currentWindowId ?? null;
   taskClustersEl.innerHTML = '';
   if (!viewClusters.length) {
     taskClustersEl.hidden = true;
@@ -448,6 +494,8 @@ function renderCluster(cluster, index) {
 
   const head = document.createElement('div');
   head.className = 'task-cluster-head';
+  const headText = document.createElement('div');
+  headText.className = 'task-cluster-head-text';
   const title = document.createElement('div');
   title.className = 'task-cluster-title';
   const winNote = cluster.windowIds && cluster.windowIds.length > 1 ? ' · 跨窗口（逻辑）' : '';
@@ -455,7 +503,18 @@ function renderCluster(cluster, index) {
   const meta = document.createElement('div');
   meta.className = 'task-cluster-meta';
   meta.textContent = edgeSummary(cluster.edges);
-  head.append(title, meta);
+  headText.append(title, meta);
+
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'btn-text btn-close-group';
+  closeBtn.dataset.action = 'close-group';
+  closeBtn.dataset.clusterId = cluster.id;
+  closeBtn.dataset.index = String(index);
+  closeBtn.textContent = '关闭本组';
+  closeBtn.title = '关闭本组';
+  closeBtn.setAttribute('aria-label', '关闭本组');
+  head.append(headText, closeBtn);
 
   const actions = document.createElement('div');
   actions.className = 'task-cluster-actions';
@@ -621,6 +680,35 @@ function onTaskClustersClick(ev) {
     if (plan) void sendMergePlan(plan);
   } else if (action === 'split') {
     void sendFeedback('split', viewClusters[index], null);
+  } else if (action === 'close-group') {
+    const cluster =
+      viewClusters.find((c) => c.id === actionBtn.dataset.clusterId) || viewClusters[index];
+    if (cluster) void sendCloseGroup(cluster);
+  }
+}
+
+async function sendCloseGroup(cluster) {
+  const payload = buildCloseGroupPayload(cluster, {
+    allWindows: allWindowsView,
+    currentWindowId: viewCurrentWindowId,
+  });
+  actionResult.textContent = payload.tabIds.length
+    ? `正在关闭 ${payload.tabIds.length} 个标签…`
+    : '本组没有可关闭的标签';
+  if (!payload.tabIds.length) return;
+  try {
+    const res = await send(MSG.CLOSE_TASK_GROUP, payload);
+    renderTaskView(res);
+    const closed = Number(res?.closed) || 0;
+    const gone = Number(res?.alreadyGone) || 0;
+    actionResult.textContent =
+      closed > 0
+        ? `已关闭本组 ${closed} 个标签`
+        : gone > 0
+          ? '本组标签已不在'
+          : '没有关闭任何标签';
+  } catch (err) {
+    actionResult.textContent = err instanceof Error ? err.message : String(err);
   }
 }
 

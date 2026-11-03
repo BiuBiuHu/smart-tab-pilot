@@ -17,7 +17,9 @@
 | 同窗同名组 | `shared/physical-groups.js` | `coalesceWindowPlacements` / `pickReusableGroupId` |
 | 去重副作用 | `background/dedupe.js` | 全窗口 query |
 | referrer | `content/extract.js` | `TAB_NAV_HINT` |
-| 侧栏 | `sidepanel/*` | 全部窗口 / 仅当前窗口；合并/拆分 |
+| 侧栏 | `sidepanel/*` | 全部窗口 / 仅当前窗口；合并/拆分/关闭本组；设置面板收模型配置 |
+| 关闭本组 | `shared/close-group.js` + `background/close-group.js` | 按视图范围 `tabs.remove`；剪掉会话 tabId 边 |
+| 设置面板 | `shared/settings-panel.js` | 标题栏右上角开关；模型字段只在面板内 |
 
 ## 2. 算法草图（已实现，非假设）
 
@@ -75,7 +77,7 @@ Chrome `tabs.Tab` **没有** `createdAt`，时间边只使用本扩展观察到�
 npm test
 ```
 
-覆盖：opener 混主题仍一团、同域不同主题拆开、时间+冲突主题不并、学习边、反馈 merge/split、跨窗 URL 匹配、浅模式拒绝、Bettr 项目亲和、短摘要不落盘正文、同窗同名物理组合并、侧栏拖拽任意任务/标签合并（含 HTML5 dataTransfer 仿真与学习 +0.35）、模型同组入参（标题+完整 URL+短摘要+nav）以及截图场景（Bettr Promotion × 语雀）的脚本化 judge 合并/拆分。
+覆盖：opener 混主题仍一团、同域不同主题拆开、时间+冲突主题不并、学习边、反馈 merge/split、跨窗 URL 匹配、浅模式拒绝、Bettr 项目亲和、短摘要不落盘正文、同窗同名物理组合并、侧栏拖拽任意任务/标签合并（含 HTML5 dataTransfer 仿真与学习 +0.35）、模型同组入参（标题+完整 URL+短摘要+nav）以及截图场景（Bettr Promotion × 语雀）的脚本化 judge 合并/拆分、关闭本组（跨窗/仅当前窗/已关闭 tab/会话边清理）、设置面板开合与模型字段位置。
 
 ## 7. 本环境无法远程验证的部分
 

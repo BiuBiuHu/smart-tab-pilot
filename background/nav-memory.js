@@ -14,6 +14,7 @@ import {
   emptyPriorStore,
   normalizePriorStore,
 } from '../shared/nav-priors.js';
+import { dropClosedTabsFromSession } from '../shared/close-group.js';
 import { recordSessionFeedback } from '../shared/task-graph.js';
 import { forgetLineage, getLineage, getLineageMap, hydrateLineage } from './tab-lineage.js';
 
@@ -96,6 +97,27 @@ export async function recordClosePriors(tabId) {
   }
 
   await savePriors(store);
+  await pruneSessionFeedbackForTabs([tabId]);
+}
+
+/**
+ * Drop session merge/split pairs that mention closed tab ids (id reuse).
+ * Does not touch durable URL priors.
+ * @param {number[]} tabIds
+ */
+export async function pruneSessionFeedbackForTabs(tabIds) {
+  const ids = (tabIds || []).filter((n) => Number.isFinite(n));
+  if (!ids.length) return;
+  const session = await loadSessionFeedback();
+  const next = dropClosedTabsFromSession(session, ids);
+  if (
+    next.merges.length === session.merges.length &&
+    next.splits.length === session.splits.length
+  ) {
+    return next;
+  }
+  await saveSessionFeedback(next);
+  return next;
 }
 
 /**
