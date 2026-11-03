@@ -8,10 +8,13 @@ export function shouldSkipUrl(url) {
 
 /**
  * Normalize URL for exact-dedupe comparison.
+ * Keeps pathname/search exact (including trailing slash). Hash stripped only when ignoreHash.
  * @param {string} url
  * @param {{ ignoreHash?: boolean }} opts
+ * @returns {string}
  */
 export function normalizeUrl(url, { ignoreHash = false } = {}) {
+  if (!url || typeof url !== 'string') return '';
   try {
     const u = new URL(url);
     if (ignoreHash) u.hash = '';
