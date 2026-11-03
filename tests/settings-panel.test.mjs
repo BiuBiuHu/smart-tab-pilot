@@ -1,5 +1,5 @@
 /**
- * Header settings control: model config lives in a collapsible panel.
+ * Settings is a full-page view, mutually exclusive with the task list.
  */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -7,89 +7,91 @@ import { describe, it } from 'node:test';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  isSettingsOutsideClick,
-  nextSettingsOpen,
+  nextPanelView,
+  panelViewState,
   SETTINGS_PANEL_ID,
-  settingsPanelView,
-  settingsTriggerAttrs,
+  TASK_VIEW_ID,
 } from '../shared/settings-panel.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const html = readFileSync(join(root, 'sidepanel/sidepanel.html'), 'utf8');
 
-describe('settings panel state', () => {
-  it('toggles, closes on outside / escape, and exposes 设置 a11y attrs', () => {
-    assert.equal(nextSettingsOpen(false, 'toggle'), true);
-    assert.equal(nextSettingsOpen(true, 'toggle'), false);
-    assert.equal(nextSettingsOpen(true, 'outside'), false);
-    assert.equal(nextSettingsOpen(true, 'escape'), false);
-    assert.equal(nextSettingsOpen(false, 'open'), true);
+describe('panel view switching (tasks ↔ settings)', () => {
+  it('open settings hides the task view; back restores it', () => {
+    assert.equal(nextPanelView('tasks', 'open-settings'), 'settings');
+    assert.equal(nextPanelView('settings', 'back-to-tasks'), 'tasks');
+    assert.equal(nextPanelView('settings', 'escape'), 'tasks');
+    assert.equal(nextPanelView('settings', 'open-settings'), 'settings');
 
-    const closed = settingsPanelView(false);
-    assert.equal(closed.hidden, true);
-    assert.equal(closed.trigger['aria-label'], '设置');
-    assert.equal(closed.trigger.title, '设置');
-    assert.equal(closed.trigger['aria-expanded'], 'false');
-    assert.equal(closed.trigger['aria-controls'], SETTINGS_PANEL_ID);
+    const onSettings = panelViewState('settings', { quickSearchOn: true });
+    assert.equal(onSettings.view, 'settings');
+    assert.equal(onSettings.settingsHidden, false);
+    assert.equal(onSettings.taskHidden, true);
+    assert.equal(onSettings.searchHidden, true);
+    assert.equal(onSettings.headerHintHidden, true);
+    assert.equal(onSettings.settingsTrigger['aria-pressed'], 'true');
+    assert.equal(onSettings.settingsTrigger['aria-label'], '当前视图：设置');
+    assert.equal(onSettings.back['aria-label'], '返回任务视图');
+    assert.equal(onSettings.back.hidden, false);
 
-    const open = settingsPanelView(true);
-    assert.equal(open.hidden, false);
-    assert.equal(open.trigger['aria-expanded'], 'true');
-    assert.deepEqual(settingsTriggerAttrs(true)['aria-label'], '设置');
+    const onTasks = panelViewState(nextPanelView('settings', 'back-to-tasks'), {
+      quickSearchOn: true,
+    });
+    assert.equal(onTasks.view, 'tasks');
+    assert.equal(onTasks.settingsHidden, true);
+    assert.equal(onTasks.taskHidden, false);
+    assert.equal(onTasks.searchHidden, false);
+    assert.equal(onTasks.settingsTrigger['aria-pressed'], 'false');
+    assert.equal(onTasks.settingsTrigger['aria-label'], '设置');
+    assert.equal(onTasks.back.hidden, true);
   });
 
-  it('outside click ignores hits on the gear or the panel', () => {
-    assert.equal(isSettingsOutsideClick({ toggleContains: true, panelContains: false }), false);
-    assert.equal(isSettingsOutsideClick({ toggleContains: false, panelContains: true }), false);
-    assert.equal(isSettingsOutsideClick({ toggleContains: false, panelContains: false }), true);
+  it('does not treat outside click as a close action (not a popover)', () => {
+    assert.equal(nextPanelView('settings', 'outside'), 'settings');
   });
 });
 
-describe('sidepanel HTML: model fields and feature toggles only inside settings', () => {
-  it('places a 设置 control at the header and hides the panel by default', () => {
+describe('sidepanel HTML: settings page vs task surface', () => {
+  it('has a 设置 control and a 返回任务视图 control', () => {
     assert.match(html, /id="btn-settings"/);
     assert.match(html, /aria-label="设置"/);
-    assert.match(html, /title="设置"/);
+    assert.match(html, /id="btn-back-settings"/);
+    assert.match(html, /aria-label="返回任务视图"/);
+    assert.match(html, /返回任务视图/);
     assert.match(html, /id="settings-panel"/);
     assert.match(html, /id="settings-panel"[^>]*hidden/);
-    const headerIdx = html.indexOf('class="header"');
-    const btnIdx = html.indexOf('id="btn-settings"');
-    const taskIdx = html.indexOf('id="task-view-card"');
-    assert.ok(headerIdx >= 0 && btnIdx > headerIdx && btnIdx < taskIdx);
+    const headerEnd = html.indexOf('</header>');
+    const settingsIdx = html.indexOf('id="settings-panel"');
+    const taskIdx = html.indexOf(`id="${TASK_VIEW_ID}"`);
+    assert.ok(headerEnd > 0 && settingsIdx > headerEnd);
+    assert.ok(taskIdx > 0);
+    assert.equal(SETTINGS_PANEL_ID, 'settings-panel');
   });
 
-  it('moves Nano, custom model, 功能开关, and window scope off the main body', () => {
-    const start = html.indexOf('id="settings-panel"');
-    const end = html.indexOf('id="task-view-card"');
-    assert.ok(start > 0 && end > start);
-    const inside = html.slice(start, end);
-    const outsideBefore = html.slice(0, start);
-    const outsideAfter = html.slice(end);
-    assert.match(inside, /id="feature-toggles"/);
-    assert.match(inside, /功能开关/);
-    assert.match(inside, /id="scope-all"/);
-    assert.match(inside, /id="scope-current"/);
-    assert.match(inside, /id="toggle-dedupe"/);
-    assert.match(inside, /id="toggle-ignore-hash"/);
-    assert.match(inside, /id="toggle-auto-group"/);
-    assert.match(inside, /id="toggle-quick-search"/);
-    assert.match(inside, /id="nano-section"/);
-    assert.match(inside, /id="custom-base-url"/);
-    assert.match(inside, /id="custom-api-key"/);
-    assert.match(inside, /id="custom-model"/);
-    assert.match(inside, /id="btn-save-custom"/);
-    assert.match(inside, /id="btn-download-nano"/);
-    assert.doesNotMatch(outsideBefore, /id="custom-base-url"/);
-    assert.doesNotMatch(outsideAfter, /id="nano-section"/);
-    assert.doesNotMatch(outsideAfter, /id="custom-base-url"/);
-    assert.doesNotMatch(outsideAfter, /id="toggle-dedupe"/);
-    assert.doesNotMatch(outsideAfter, /id="scope-all"/);
-    assert.doesNotMatch(outsideAfter, /功能开关/);
-    assert.doesNotMatch(outsideAfter, /Gemini Nano/);
-    assert.doesNotMatch(outsideAfter, /Prompt API/);
-    assert.doesNotMatch(outsideAfter, /id="nano-status"/);
-    assert.doesNotMatch(outsideAfter, /id="btn-download-nano"/);
-    assert.match(outsideAfter, /id="btn-group-now"/);
-    assert.match(outsideAfter, /id="btn-refresh-tasks"/);
+  it('keeps Nano, model fields, and 功能开关 off the task-view card', () => {
+    const settingsStart = html.indexOf('id="settings-panel"');
+    const taskStart = html.indexOf('id="task-view-card"');
+    const searchStart = html.indexOf('id="search-card"');
+    assert.ok(settingsStart > 0 && taskStart > settingsStart && searchStart > taskStart);
+    const settings = html.slice(settingsStart, taskStart);
+    const task = html.slice(taskStart, searchStart);
+    assert.match(settings, /返回任务视图/);
+    assert.match(settings, /id="feature-toggles"/);
+    assert.match(settings, /功能开关/);
+    assert.match(settings, /id="scope-all"/);
+    assert.match(settings, /id="toggle-dedupe"/);
+    assert.match(settings, /id="nano-section"/);
+    assert.match(settings, /Gemini Nano/);
+    assert.match(settings, /Prompt API/);
+    assert.match(settings, /id="custom-base-url"/);
+    assert.match(task, /id="btn-group-now"/);
+    assert.match(task, /id="btn-refresh-tasks"/);
+    assert.match(task, /任务视图/);
+    assert.doesNotMatch(task, /Gemini Nano/);
+    assert.doesNotMatch(task, /Prompt API/);
+    assert.doesNotMatch(task, /id="nano-section"/);
+    assert.doesNotMatch(task, /id="custom-base-url"/);
+    assert.doesNotMatch(task, /id="toggle-dedupe"/);
+    assert.doesNotMatch(task, /功能开关/);
   });
 });

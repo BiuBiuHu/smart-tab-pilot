@@ -4,11 +4,7 @@
 import { withDeadline } from '../shared/async-timeout.js';
 import { GROUP_RPC_TIMEOUT_MS, MSG, REFINE_STALL_MS } from '../shared/constants.js';
 import { buildCloseGroupPayload } from '../shared/close-group.js';
-import {
-  isSettingsOutsideClick,
-  nextSettingsOpen,
-  settingsPanelView,
-} from '../shared/settings-panel.js';
+import { nextPanelView, panelViewState } from '../shared/settings-panel.js';
 import {
   buildTaskFeedbackPayload,
   consumeDragClickSuppress,
@@ -43,7 +39,10 @@ const groupProgressFill = $('group-progress-fill');
 const groupProgressText = $('group-progress-text');
 const fallbackHint = $('fallback-hint');
 const btnSettings = $('btn-settings');
+const btnBackSettings = $('btn-back-settings');
 const settingsPanelEl = $('settings-panel');
+const taskViewCard = $('task-view-card');
+const panelHintEl = $('panel-hint');
 const searchInput = $('search-input');
 const searchResults = $('search-results');
 const searchEmpty = $('search-empty');
@@ -67,7 +66,8 @@ let viewClusters = [];
 let allWindowsView = true;
 /** @type {number | null} */
 let viewCurrentWindowId = null;
-let settingsOpen = false;
+/** @type {'tasks'|'settings'} */
+let panelView = 'tasks';
 
 init();
 
@@ -101,24 +101,18 @@ function bind() {
     }
   });
   btnSaveCustom.addEventListener('click', onSaveCustom);
-  btnSettings?.addEventListener('click', (ev) => {
-    ev.stopPropagation();
-    setSettingsOpen(nextSettingsOpen(settingsOpen, 'toggle'));
+  btnSettings?.addEventListener('click', () => {
+    setPanelView(nextPanelView(panelView, 'open-settings'));
   });
-  document.addEventListener('click', (ev) => {
-    if (!settingsOpen) return;
-    const outside = isSettingsOutsideClick({
-      toggleContains: Boolean(btnSettings?.contains(ev.target)),
-      panelContains: Boolean(settingsPanelEl?.contains(ev.target)),
-    });
-    if (outside) setSettingsOpen(nextSettingsOpen(settingsOpen, 'outside'));
+  btnBackSettings?.addEventListener('click', () => {
+    setPanelView(nextPanelView(panelView, 'back-to-tasks'));
   });
   document.addEventListener('keydown', (ev) => {
-    if (ev.key === 'Escape' && settingsOpen) {
-      setSettingsOpen(nextSettingsOpen(settingsOpen, 'escape'));
+    if (ev.key === 'Escape' && panelView === 'settings') {
+      setPanelView(nextPanelView(panelView, 'escape'));
     }
   });
-  applySettingsPanel();
+  applyPanelView();
   btnGroupNow.addEventListener('click', onGroupNow);
   btnRefreshTasks.addEventListener('click', () => void refreshTaskView());
   scopeAll.addEventListener('change', onScopeChange);
@@ -148,26 +142,33 @@ function bind() {
   searchResults.addEventListener('click', onResultsClick);
 }
 
-/** @param {boolean} enabled */
-function setSettingsOpen(open) {
-  settingsOpen = Boolean(open);
-  applySettingsPanel();
+/** @param {'tasks'|'settings'} view */
+function setPanelView(view) {
+  panelView = view === 'settings' ? 'settings' : 'tasks';
+  applyPanelView();
 }
 
-function applySettingsPanel() {
-  const view = settingsPanelView(settingsOpen);
-  if (settingsPanelEl) settingsPanelEl.hidden = view.hidden;
+function applyPanelView() {
+  const state = panelViewState(panelView, { quickSearchOn });
+  if (settingsPanelEl) settingsPanelEl.hidden = state.settingsHidden;
+  if (taskViewCard) taskViewCard.hidden = state.taskHidden;
+  if (searchCard) searchCard.hidden = state.searchHidden;
+  if (panelHintEl) panelHintEl.hidden = state.headerHintHidden;
   if (btnSettings) {
-    btnSettings.title = view.trigger.title;
-    btnSettings.setAttribute('aria-label', view.trigger['aria-label']);
-    btnSettings.setAttribute('aria-expanded', view.trigger['aria-expanded']);
-    btnSettings.setAttribute('aria-controls', view.trigger['aria-controls']);
+    btnSettings.title = state.settingsTrigger.title;
+    btnSettings.setAttribute('aria-label', state.settingsTrigger['aria-label']);
+    btnSettings.setAttribute('aria-pressed', state.settingsTrigger['aria-pressed']);
+    btnSettings.setAttribute('aria-controls', state.settingsTrigger['aria-controls']);
+  }
+  if (btnBackSettings) {
+    btnBackSettings.title = state.back.title;
+    btnBackSettings.setAttribute('aria-label', state.back['aria-label']);
   }
 }
 
 function applyQuickSearchVisibility(enabled) {
   quickSearchOn = !!enabled;
-  if (searchCard) searchCard.hidden = !quickSearchOn;
+  applyPanelView();
 }
 
 /**

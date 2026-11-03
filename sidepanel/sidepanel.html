@@ -20,7 +20,7 @@
           type="button"
           title="设置"
           aria-label="设置"
-          aria-expanded="false"
+          aria-pressed="false"
           aria-controls="settings-panel"
         >
           <svg class="btn-settings-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
@@ -31,8 +31,22 @@
           </svg>
         </button>
       </div>
-      <p class="panel-hint">侧边栏面板 · 点击工具栏图标即可打开</p>
-      <div id="settings-panel" class="settings-panel" hidden>
+      <p id="panel-hint" class="panel-hint">侧边栏面板 · 点击工具栏图标即可打开</p>
+    </header>
+
+    <section class="card settings-page" id="settings-panel" hidden>
+      <div class="settings-page-head">
+        <button
+          id="btn-back-settings"
+          class="btn-back-settings"
+          type="button"
+          title="返回任务视图"
+          aria-label="返回任务视图"
+        >
+          返回任务视图
+        </button>
+        <h2 class="settings-page-title">设置</h2>
+      </div>
         <section class="settings-block" id="nano-section">
           <div class="card-title">Gemini Nano（内置 Prompt API）</div>
           <div class="status-row">
@@ -91,8 +105,7 @@
           </label>
         </section>
         <p id="fallback-hint" class="hint"></p>
-      </div>
-    </header>
+    </section>
 
     <section class="card" id="task-view-card">
       <div class="card-title">任务视图</div>

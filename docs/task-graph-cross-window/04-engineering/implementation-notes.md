@@ -19,7 +19,7 @@
 | referrer | `content/extract.js` | `TAB_NAV_HINT` |
 | 侧栏 | `sidepanel/*` | 全部窗口 / 仅当前窗口；合并/拆分/关闭本组；设置面板收模型配置 |
 | 关闭本组 | `shared/close-group.js` + `background/close-group.js` | 按视图范围 `tabs.remove`；剪掉会话 tabId 边 |
-| 设置面板 | `shared/settings-panel.js` | 标题栏右上角开关；Nano / 自定义模型 / 功能开关只在面板内 |
+| 设置页 | `shared/settings-panel.js` | 与任务视图互斥的整页；「返回任务视图」切回 |
 
 ## 2. 算法草图（已实现，非假设）
 

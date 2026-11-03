@@ -83,7 +83,7 @@ body {
 }
 
 .btn-settings:hover,
-.btn-settings[aria-expanded='true'] {
+.btn-settings[aria-pressed='true'] {
   border-color: var(--primary);
   color: var(--primary);
 }
@@ -92,16 +92,43 @@ body {
   display: block;
 }
 
-.settings-panel {
-  margin-top: 12px;
-  padding: 14px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+.settings-page {
+  margin-top: 10px;
 }
 
-.settings-panel[hidden] {
+.settings-page[hidden],
+#task-view-card[hidden],
+#search-card[hidden] {
   display: none;
+}
+
+.settings-page-head {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.settings-page-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.btn-back-settings {
+  background: none;
+  border: none;
+  color: var(--primary);
+  padding: 0;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-back-settings:hover {
+  text-decoration: underline;
 }
 
 .settings-block + .settings-block {
