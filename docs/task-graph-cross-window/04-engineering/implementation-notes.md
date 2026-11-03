@@ -11,6 +11,10 @@
 | 活边 | `background/tab-lineage.js` | `onCreated` / `onUpdated` / `onAttached` |
 | 关闭落盘 + 反馈 API | `background/nav-memory.js` | `recordClosePriors` / `applyTaskFeedback` |
 | 调度与物理组 | `background/grouping.js` | `groupTabs` / `getTaskView` / `placeTabsInGroup` |
+| 项目亲和 | `shared/project-affinity.js` | slug / loopback 同端口 / origin+两段 path |
+| 短摘要 | `shared/tab-summary.js` + `background/tab-summaries.js` | 导航刷新；禁全文落盘 |
+| 模型同组钩子 | `shared/model-group-judge.js` | 规则之后；Nano/自定义可用才调用 |
+| 同窗同名组 | `shared/physical-groups.js` | `coalesceWindowPlacements` / `pickReusableGroupId` |
 | 去重副作用 | `background/dedupe.js` | 全窗口 query |
 | referrer | `content/extract.js` | `TAB_NAV_HINT` |
 | 侧栏 | `sidepanel/*` | 全部窗口 / 仅当前窗口；合并/拆分 |
@@ -22,15 +26,18 @@ nodes = tabs + lineage + semanticLabel
 UF = {}
 
 union sessionMerges          // 用户反馈
+union extraUnions            // 可选：模型同组（第二层，只加并）
 union openerTabId            // 强：标签树，可跨窗（lineage）
 union referrer → 打开中 URL  // 强-中：点击来源
+union project affinity       // 强-中：产品 slug / 本地同端口 / origin+两段 path；标题不拆
 union time-adjacent          // 中：同窗 + createdAt 差 ≤ 45s + 主题兼容
 union learned prior ≥ 0.35   // 弱：历史 opener/时间/反馈
 forbid sessionSplits
 
 if 弱簇主题混杂 and 无强边跨主题: split by topic
-label = majority semantic topic
-physical = group by (cluster, windowId)
+label = projectDisplayName || majority semantic topic
+persist tabSummary(title, path/slug, 1–2句)  // 永不落盘全文
+physical = coalesce by (windowId, normalize(label)) → 一窗一名一组
 ```
 
 Chrome `tabs.Tab` **没有** `createdAt`，时间边只使用本扩展观察到的 `onCreated`。
@@ -68,7 +75,7 @@ Chrome `tabs.Tab` **没有** `createdAt`，时间边只使用本扩展观察到�
 npm test
 ```
 
-覆盖：opener 混主题仍一团、同域不同主题拆开、时间+冲突主题不并、学习边、反馈 merge/split、跨窗 URL 匹配、浅模式拒绝。
+覆盖：opener 混主题仍一团、同域不同主题拆开、时间+冲突主题不并、学习边、反馈 merge/split、跨窗 URL 匹配、浅模式拒绝、Bettr 项目亲和、短摘要不落盘正文、同窗同名物理组合并。
 
 ## 7. 手工要点
 

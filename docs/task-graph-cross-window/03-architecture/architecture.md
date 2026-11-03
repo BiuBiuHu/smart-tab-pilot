@@ -5,6 +5,7 @@
 | 版本 | 日期 | 变更 | 原因 |
 |------|------|------|------|
 | v0.1 | 2026-11-03 | 任务导航图 / navigation graph learning | 用户要求可学习来源 + 跨窗口 |
+| v0.2 | 2026-11-03 | 项目亲和 + 短摘要 + 同窗同名物理组合一 | Bettr 过碎；两个「LinkE」 |
 
 ## 1. 命名
 
@@ -44,6 +45,10 @@ flowchart TB
 | 模块 | 职责 |
 |------|------|
 | `shared/task-graph.js` | 纯函数：union-find 任务簇；会话 merge/split |
+| `shared/project-affinity.js` | 产品 slug / 本地同源 / origin+两段 path；禁止裸域名 |
+| `shared/tab-summary.js` | 短摘要：标题 + path/slug + 1–2 句；禁止落盘全文 |
+| `shared/model-group-judge.js` | 规则之后的模型同组钩子（只读摘要） |
+| `shared/physical-groups.js` | 同窗同名物理组合并；禁止第二个同标题组 |
 | `shared/nav-priors.js` | 纯函数：prior 加减权、封顶、拒绝浅模式 |
 | `shared/url-pattern.js` | origin+path，id/工单段 → `*`；禁止 hostname-only |
 | `shared/dedupe-match.js` | 全量 tab 列表上的精确 URL 匹配 |
@@ -89,19 +94,27 @@ tabId → { openerTabId, openerUrl, createdAt, windowId, url, pendingUrl, referr
 `merges: [tabId, tabId][]`、`splits: [tabId, tabId][]`。  
 拆分覆盖 opener（用户明确说「不是同一任务」）；合并强制连边。这是后续加厚在线学习的稳定扩展点：`applyTaskFeedback` / `MSG.TASK_FEEDBACK`。
 
+### 3.4 短摘要（`chrome.storage.session` `tabSummaries`）
+
+```text
+tabId → { title, url, pathKey, slugs[], excerpt≤280, extractedAt }
+```
+
+导航换 URL 即刷新（丢掉旧摘录）；关标签删除。容量 200。抽取最多读 ~800 字进内存，只留下 1–2 句。**禁止**把 4k 正文写入任何 storage。
+
 ## 4. 聚类（union-find）
 
-顺序：会话合并 → opener → referrer 命中 → 时间（主题兼容）→ 学习 prior（权重 ≥ 0.35 且主题兼容）→ 语义只拆「没有强边、主题混杂」的弱簇。
+顺序：会话合并 → opener → referrer 命中 → **项目亲和**（标题不拆）→ 时间（主题兼容）→ 学习 prior（权重 ≥ 0.35 且主题兼容）→ 语义只拆「没有强边、主题混杂」的弱簇 → 可选模型同组（只看短摘要，只加并、不拆强边）。
 
-**禁止**：用 hostname 或「仅 label 相同」做并查集 union。
+**禁止**：用裸 hostname 或「仅 label 相同」做并查集 union。同窗**物理组**则按规范化标题合一：不得出现两个「LinkE」。
 
-任务显示名 = 簇内多数主题（Nano / 自定义 / 启发式）；混合 opener 链保留整簇，名称取多数主题。
+任务显示名 = `projectDisplayName`（如 Bettr Promotion）或簇内多数主题；混合 opener / 项目链保留整簇。
 
 ## 5. 物理 vs 逻辑
 
 - 逻辑簇 `task-*` 可含多个 `windowId`。
 - 物理：对每个 `(cluster, windowId)` 调用 `tabs.group`；**不** `tabs.move` 跨窗。
-- 复用已有 group 当且仅当该组内没有「别的任务」的标签（避免旧语义组把不同任务粘住）。
+- 复用已有 group：同窗规范化标题相同则并入（并折叠重复同名组）；否则仅复用「只含本批标签」的组。**同一窗口不得创建第二个同标题 `tabGroup`。**
 
 ## 6. 去重
 
@@ -122,6 +135,7 @@ tabId → { openerTabId, openerUrl, createdAt, windowId, url, pendingUrl, referr
 
 1. 学习边不得退化为 hostname 对。
 2. 去重不得依赖 LLM / 任务图。
-3. 语义不得重新成为主聚类。
-4. 物理组不得跨窗口移动标签。
+3. 语义不得重新成为主聚类；也不得因标题冲突拆开项目亲和。
+4. 物理组不得跨窗口移动标签；同窗不得出现两个同名组。
 5. 自定义 Key 仍只放 `storage.sync`，不进仓库。
+6. 不得把整页正文写入 storage；只持久化短摘要（标题 + path/slug + ≤280 字摘录）。

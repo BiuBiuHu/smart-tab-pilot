@@ -13,11 +13,12 @@ Manifest V3 Chrome 扩展：**精确 URL 去重跳转（跨窗口）** + **任�
    - 跳过 `chrome://`、`chrome-extension://`、`about:`、`edge://` 等内部页。
 
 2. **任务导航图（navigation graph learning）**  
-   - 强边：`openerTabId` 标签树；`document.referrer` 命中另一个打开中的页面。  
+   - 强边：`openerTabId` 标签树；`document.referrer` 命中另一个打开中的页面；**项目亲和**（产品 slug / 本地同端口 / origin+两段 path，强于冲突页标题）。  
    - 中边：同一窗口、短时间相邻打开（默认 45s）。  
    - 弱边：标签关闭后记住 origin+path 模式对，同类导航会加强关联。  
-   - 语义（Nano / 自定义 / 启发式）只用于**精炼与命名**，不是主合并键。  
-   - **禁止按域名聚合**；同域不同任务 / 不同主题必须分开。  
+   - 语义（Nano / 自定义 / 启发式）只用于**精炼与命名**，不是主合并键，也不得拆开同项目标签。  
+   - 每标签只持久化**短摘要**（标题 + path/slug + 1–2 句），不存整页正文；可选模型同组钩子只读摘要。  
+   - **禁止按裸域名聚合**；同域不同产品仍可拆。同窗物理组按标题合一，不得出现两个「LinkE」。  
    - `chrome.tabGroups` 仍按窗口物理写入；跨窗口只做逻辑聚合。  
    - 侧栏可「与上一任务合并 / 拆成独立任务」（调整边权的扩展点）。
 
@@ -96,8 +97,9 @@ smart-tab-pilot/
 │   ├── dedupe.js           # 精确 URL 去重
 │   ├── grouping.js         # 任务簇调度 + 按窗 tabGroups
 │   ├── tab-lineage.js      # 存活 opener / 时间 / referrer
+│   ├── tab-summaries.js    # 短摘要落盘（禁全文）
 │   ├── nav-memory.js       # 关闭落 prior + 反馈扩展点
-│   ├── classifier.js       # Nano / 自定义 / 启发式（命名）
+│   ├── classifier.js       # Nano / 自定义 / 启发式（命名 + 同组钩子）
 │   ├── recent-closed.js    # 关闭标签追踪（storage.local）
 │   └── search.js           # 打开/关闭标签快速搜索
 ├── content/
@@ -117,6 +119,10 @@ smart-tab-pilot/
     ├── url-pattern.js      # 学习边用的 origin+path 模式
     ├── nav-priors.js       # prior 加减权
     ├── task-graph.js       # 任务导航图 union-find
+    ├── project-affinity.js # 产品 slug / 本地同源
+    ├── tab-summary.js      # 短摘要纯函数
+    ├── model-group-judge.js
+    ├── physical-groups.js  # 同窗同名组合一
     └── dedupe-match.js     # 跨窗口精确 URL 匹配
 ```
 

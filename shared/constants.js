@@ -25,7 +25,8 @@ export const DEFAULT_SETTINGS = {
 
 /**
  * 任务导航图（navigation graph learning）constants.
- * Strong opener / medium time / weak learned-prior + semantic refine.
+ * Strong opener / project affinity / medium time / weak learned-prior;
+ * semantic labels name clusters and only sub-split weak mixed components.
  */
 export const TIME_ADJACENCY_MS = 45_000;
 export const LEARNED_UNION_THRESHOLD = 0.35;
@@ -34,6 +35,14 @@ export const NAV_PRIORS_CAP = 2000;
 export const SESSION_LINEAGE_KEY = 'tabLineage';
 export const SESSION_FEEDBACK_KEY = 'taskFeedbackEdges';
 export const LABEL_CACHE_KEY = 'taskLabelCache';
+export const TAB_SUMMARY_STORAGE_KEY = 'tabSummaries';
+/** Persist title + path/slug + 1–2 sentences only — never the full page body. */
+export const TAB_SUMMARY_EXCERPT_MAX = 280;
+export const TAB_SUMMARY_TITLE_MAX = 120;
+export const TAB_SUMMARY_STORE_CAP = 200;
+/** In-memory extract used only to distill a summary, then discarded. */
+export const TAB_SUMMARY_SOURCE_CHARS = 800;
+export const MODEL_JUDGE_TIMEOUT_MS = 2500;
 
 /** Per-tab extract / classify must fail-soft so 「立即整理」 cannot hang. */
 export const EXTRACT_TIMEOUT_MS = 2000;
@@ -50,6 +59,7 @@ export const LABEL_REFRESH_CONCURRENCY = 3;
 export const EDGE_WEIGHT = {
   OPENER: 1,
   REFERRER: 0.75,
+  PROJECT: 0.85,
   TIME: 0.45,
   LEARNED_OPENER_DELTA: 0.2,
   LEARNED_TIME_DELTA: 0.05,
@@ -66,6 +76,7 @@ export const SKIP_URL_PREFIXES = [
   'view-source:',
 ];
 
+/** Ephemeral extract cap (never persisted). Distill to TAB_SUMMARY_EXCERPT_MAX. */
 export const MAX_BODY_CHARS = 4000;
 
 /** Cap for recently-closed list in chrome.storage.local */
@@ -97,6 +108,19 @@ Rules:
 - If two pages share the same site but discuss different topics, they MUST get different labels.
 - Use Chinese if the page is mainly Chinese; otherwise English.
 - No quotes, no punctuation at the end, no explanation.`;
+
+/**
+ * Second-layer same-group judge. Input is short tab summaries only — never a full body.
+ */
+export const SAME_GROUP_SYSTEM_PROMPT = `You judge whether browser tabs belong to the SAME project/task.
+You only receive short summaries (title, URL path/product slug, optional 1-2 sentences). Never assume a full page body.
+Reply with ONLY JSON: {"merges":[[tabId,tabId],...]}
+Rules:
+- Merge only when summaries clearly share one product/project (e.g. Bettr Promotion consoles/demos).
+- Do NOT merge different products on the same site (two GitHub repos, two unrelated tools).
+- Do NOT merge just because hostnames match.
+- If unsure, return {"merges":[]}.
+- No markdown, no explanation.`;
 
 export const MSG = {
   GET_NANO_STATUS: 'GET_NANO_STATUS',

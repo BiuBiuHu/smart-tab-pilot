@@ -4,6 +4,8 @@
  * Inspired by alibaba/page-agent's text-based (dehydrated) DOM approach —
  * prefer semantic landmarks + visible text over a naive full-body dump,
  * so cheap text models can classify without screenshots / multimodal cost.
+ * The snapshot is ephemeral: grouping persists only a short tab summary
+ * (title + path/slug + 1–2 sentences), never this full extract.
  * We do NOT vendor page-agent; this is a small in-extension adaptation.
  *
  * @see https://github.com/alibaba/page-agent

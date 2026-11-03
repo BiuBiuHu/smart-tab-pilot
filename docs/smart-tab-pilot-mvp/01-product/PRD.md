@@ -74,7 +74,7 @@
 2. 跳过 `chrome://`、`chrome-extension://`、`about:`、`edge://`、`devtools://`、`view-source:` 等。
 3. **分组硬约束**：标签组标题来自页面正文/标题语义；**禁止按域名/站点聚合**。同一域名下不同主题的标签必须进入不同组。
 4. Content Script + 注入回退的紧凑文本抽取（标题、语义主区域、h1–h3、可见正文，去噪，≤~4000 字符）。
-5. 自动分组改为**任务导航图**（opener / 时间 / 学习边；语义只精炼与命名）。
+5. 自动分组改为**任务导航图**（opener / 项目亲和 / 时间 / 学习边；语义只精炼与命名）。只持久化短摘要，不存整页正文。同窗同名物理组合一。
 6. `chrome.tabGroups` **按窗口**写入；侧栏逻辑任务可跨窗。不同任务即使主题名相同也不并组。
 7. 模型阶梯与侧边栏状态：Nano availability、downloadable 用户手势下载、OpenAI 兼容字段、启发式回退提示。
 8. 设置持久化：`chrome.storage.sync`（含 `quickSearchEnabled` 默认 false）。

@@ -3,7 +3,12 @@
  * Labels name a task cluster (body/title semantics only) — never domain/hostname aggregation.
  * Clustering itself lives in the 任务导航图 (opener / time / learned priors); this module only labels.
  */
-import { CLASSIFY_SYSTEM_PROMPT, MAX_BODY_CHARS } from '../shared/constants.js';
+import {
+  CLASSIFY_SYSTEM_PROMPT,
+  SAME_GROUP_SYSTEM_PROMPT,
+  TAB_SUMMARY_EXCERPT_MAX,
+} from '../shared/constants.js';
+import { formatJudgeUserPrompt, parseJudgeResponse } from '../shared/model-group-judge.js';
 import {
   heuristicLabel,
   rejectDomainishLabel,
@@ -76,8 +81,8 @@ export async function downloadNano() {
  */
 export async function classifyPage(page) {
   const title = (page.title || '').trim();
-  const text = (page.text || '').slice(0, MAX_BODY_CHARS).trim();
-  const snippet = `${title}\n\n${text}`.trim().slice(0, MAX_BODY_CHARS);
+  const text = (page.text || '').slice(0, TAB_SUMMARY_EXCERPT_MAX).trim();
+  const snippet = `${title}\n\n${text}`.trim().slice(0, TAB_SUMMARY_EXCERPT_MAX);
 
   const nano = await tryNanoClassify(snippet);
   if (nano) return { label: sanitizeLabel(nano), source: 'nano' };
@@ -152,6 +157,76 @@ async function tryCustomClassify(snippet) {
     return rejectDomainishLabel(raw) || null;
   } catch (err) {
     console.warn('[SmartTabPilot] custom classify failed', err);
+    return null;
+  }
+}
+
+/**
+ * Second-layer same-group judge on short summaries. Null when no model.
+ * @param {ReturnType<typeof import('../shared/model-group-judge.js').buildJudgePayload>} payload
+ * @returns {Promise<import('../shared/model-group-judge.js').ModelJudgment | null>}
+ */
+export async function tryModelSameGroupJudge(payload) {
+  const user = formatJudgeUserPrompt(payload);
+  const nano = await tryNanoJudge(user);
+  if (nano) return nano;
+  return tryCustomJudge(user);
+}
+
+/** @param {string} user */
+async function tryNanoJudge(user) {
+  try {
+    if (typeof LanguageModel === 'undefined') return null;
+    const availability = await LanguageModel.availability(NANO_CREATE_OPTIONS);
+    if (availability !== 'available' && availability !== 'readily') return null;
+    const session = await LanguageModel.create(NANO_CREATE_OPTIONS);
+    try {
+      const raw = await session.prompt(`${SAME_GROUP_SYSTEM_PROMPT}\n\n---\n${user}`);
+      return parseJudgeResponse(raw);
+    } finally {
+      session.destroy?.();
+    }
+  } catch (err) {
+    console.warn('[SmartTabPilot] Nano same-group judge failed', err);
+    return null;
+  }
+}
+
+/** @param {string} user */
+async function tryCustomJudge(user) {
+  const settings = await getSettings();
+  const base = (settings.customBaseUrl || '').replace(/\/+$/, '');
+  const key = settings.customApiKey || '';
+  const model = settings.customModel || 'gpt-4o-mini';
+  if (!base || !key) return null;
+
+  const url = base.endsWith('/chat/completions')
+    ? base
+    : `${base}/chat/completions`;
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${key}`,
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0.1,
+        max_tokens: 256,
+        messages: [
+          { role: 'system', content: SAME_GROUP_SYSTEM_PROMPT },
+          { role: 'user', content: user },
+        ],
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const content = data?.choices?.[0]?.message?.content;
+    return typeof content === 'string' ? parseJudgeResponse(content) : null;
+  } catch (err) {
+    console.warn('[SmartTabPilot] custom same-group judge failed', err);
     return null;
   }
 }

@@ -507,9 +507,11 @@ function edgeSummary(edges) {
   const parts = [];
   if (edges.opener) parts.push(`来源×${edges.opener}`);
   if (edges.referrer) parts.push(`引用×${edges.referrer}`);
+  if (edges.project) parts.push(`项目×${edges.project}`);
   if (edges.time) parts.push(`时间×${edges.time}`);
   if (edges.learned) parts.push(`学习×${edges.learned}`);
   if (edges.feedback) parts.push(`反馈×${edges.feedback}`);
+  if (edges.model) parts.push(`模型×${edges.model}`);
   return parts.length ? parts.join(' · ') : '独立任务';
 }
 

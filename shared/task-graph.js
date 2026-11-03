@@ -4,9 +4,11 @@
  * Build task clusters from:
  *   1. Strong: live openerTabId (tab tree) — never split by topic
  *   2. Strong-medium: referrer / click-source match to another open tab
- *   3. Medium: open-time adjacency (same window, configurable window)
- *   4. Weak learned: durable URL-pattern priors from past opener/time/feedback
- *   5. Weak semantic: refine only — sub-split mixed WEAK components;
+ *   3. Strong-medium: project affinity (product slug / loopback origin /
+ *      origin+first two path segments) — NOT bare hostname; titles cannot split
+ *   4. Medium: open-time adjacency (same window, configurable window)
+ *   5. Weak learned: durable URL-pattern priors from past opener/time/feedback
+ *   6. Weak semantic: refine only — sub-split mixed WEAK components;
  *      never the primary merge key; never hostname/domain.
  *
  * Union-find / connected components. Session merge/split overrides are the
@@ -14,6 +16,7 @@
  */
 import { LEARNED_UNION_THRESHOLD, TIME_ADJACENCY_MS } from './constants.js';
 import { priorWeight } from './nav-priors.js';
+import { projectDisplayName, sharesProjectAffinity } from './project-affinity.js';
 
 /**
  * @typedef {{
@@ -25,6 +28,7 @@ import { priorWeight } from './nav-priors.js';
  *   title?: string,
  *   referrerUrl?: string,
  *   semanticLabel?: string,
+ *   summary?: import('./tab-summary.js').TabSummary,
  * }} TaskNode
  *
  * @typedef {{
@@ -32,7 +36,7 @@ import { priorWeight } from './nav-priors.js';
  *   label: string,
  *   tabIds: number[],
  *   windowIds: number[],
- *   edges: { opener: number, referrer: number, time: number, learned: number, feedback: number },
+ *   edges: { opener: number, referrer: number, project: number, time: number, learned: number, feedback: number, model: number },
  * }} TaskCluster
  */
 
@@ -96,6 +100,7 @@ function pairKey(a, b) {
  *   priors?: { pairs?: Record<string, { weight?: number }> },
  *   sessionMerges?: [number, number][],
  *   sessionSplits?: [number, number][],
+ *   extraUnions?: [number, number][],
  * }} [opts]
  * @returns {TaskCluster[]}
  */
@@ -131,6 +136,11 @@ export function buildTaskClusters(nodes, opts = {}) {
     tryUnion(a, b, 'feedback', true);
   }
 
+  // 0b) Optional model same-group merges (second layer; still blocked by sessionSplits)
+  for (const [a, b] of opts.extraUnions || []) {
+    tryUnion(a, b, 'model', true);
+  }
+
   // 1) Strong opener (tab tree). Cross-window OK when lineage recorded openerTabId.
   for (const n of list) {
     if (n.openerTabId != null) {
@@ -150,7 +160,17 @@ export function buildTaskClusters(nodes, opts = {}) {
     }
   }
 
-  // 3) Medium: time adjacency, same window, labels compatible
+  // 3) Project affinity (product slug / local app / repo prefix). Titles do not block.
+  for (let i = 0; i < list.length; i++) {
+    for (let j = i + 1; j < list.length; j++) {
+      const a = list[i];
+      const b = list[j];
+      if (!sharesProjectAffinity(a.url, b.url)) continue;
+      tryUnion(a.id, b.id, 'project', true);
+    }
+  }
+
+  // 4) Medium: time adjacency, same window, labels compatible
   for (let i = 0; i < list.length; i++) {
     for (let j = i + 1; j < list.length; j++) {
       const a = list[i];
@@ -163,7 +183,7 @@ export function buildTaskClusters(nodes, opts = {}) {
     }
   }
 
-  // 4) Weak learned priors — future similar navigations
+  // 5) Weak learned priors — future similar navigations
   for (let i = 0; i < list.length; i++) {
     for (let j = i + 1; j < list.length; j++) {
       const a = list[i];
@@ -221,16 +241,27 @@ export function subSplitIfWeakMixed(memberIds, byId, strongPairs) {
     return [memberIds];
   }
 
-  // If any strong pair connects two different real topics, keep whole component.
+  // Strong subgraph is transitive: opener / referrer / project / feedback.
+  // Semantic labels name the cluster — they must not split a strong component.
+  const strongUf = new UnionFind(memberIds);
   for (let i = 0; i < memberIds.length; i++) {
     for (let j = i + 1; j < memberIds.length; j++) {
-      if (!strongPairs.has(pairKey(memberIds[i], memberIds[j]))) continue;
-      const la = normalizeTopicLabel(byId.get(memberIds[i])?.semanticLabel);
-      const lb = normalizeTopicLabel(byId.get(memberIds[j])?.semanticLabel);
-      if (la && lb && la !== '未分类' && lb !== '未分类' && la !== lb) {
-        return [memberIds];
+      if (strongPairs.has(pairKey(memberIds[i], memberIds[j]))) {
+        strongUf.union(memberIds[i], memberIds[j]);
       }
     }
+  }
+  /** @type {Map<number, string>} */
+  const topicAtRoot = new Map();
+  for (const id of memberIds) {
+    const label = normalizeTopicLabel(byId.get(id)?.semanticLabel) || '未分类';
+    if (!label || label === '未分类') continue;
+    const root = strongUf.find(id);
+    const prev = topicAtRoot.get(root);
+    if (prev && prev !== label) {
+      return [memberIds];
+    }
+    topicAtRoot.set(root, label);
   }
 
   const leftover = byLabel.get('未分类') || [];
@@ -252,7 +283,7 @@ export function subSplitIfWeakMixed(memberIds, byId, strongPairs) {
  */
 function toCluster(memberIds, idx, byId, usedEdges) {
   const idSet = new Set(memberIds);
-  const edges = { opener: 0, referrer: 0, time: 0, learned: 0, feedback: 0 };
+  const edges = { opener: 0, referrer: 0, project: 0, time: 0, learned: 0, feedback: 0, model: 0 };
   for (const e of usedEdges) {
     if (idSet.has(e.a) && idSet.has(e.b) && e.kind in edges) {
       edges[/** @type {keyof typeof edges} */ (e.kind)] += 1;
@@ -260,7 +291,7 @@ function toCluster(memberIds, idx, byId, usedEdges) {
   }
 
   const nodes = memberIds.map((id) => byId.get(id)).filter(Boolean);
-  const label = majorityLabel(nodes);
+  const label = projectDisplayName(nodes) || majorityLabel(nodes);
   const windowIds = [...new Set(nodes.map((n) => n.windowId))];
   const seed = memberIds.slice().sort((a, b) => a - b)[0] ?? idx;
   return {

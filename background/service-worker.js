@@ -12,8 +12,10 @@ import { applyTaskFeedback, initNavMemory } from './nav-memory.js';
 import { initRecentClosedTracking } from './recent-closed.js';
 import { activateSearchResult, searchTabs } from './search.js';
 import { initTabLineage } from './tab-lineage.js';
+import { initTabSummaries } from './tab-summaries.js';
 
 initTabLineage();
+initTabSummaries();
 initNavMemory();
 initRecentClosedTracking();
 

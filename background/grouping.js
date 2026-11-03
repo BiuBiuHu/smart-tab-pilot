@@ -10,18 +10,30 @@ import {
   LABEL_CACHE_KEY,
   LABEL_REFRESH_CONCURRENCY,
   LABEL_REFRESH_RELABEL_EVERY,
-  MAX_BODY_CHARS,
+  MODEL_JUDGE_TIMEOUT_MS,
   MSG,
+  TAB_SUMMARY_SOURCE_CHARS,
   TIME_ADJACENCY_MS,
 } from '../shared/constants.js';
 import { heuristicLabel, sanitizeLabel } from '../shared/label-utils.js';
+import { applyModelJudgment, buildJudgePayload } from '../shared/model-group-judge.js';
+import {
+  extraTabIdsToFold,
+  pickReusableGroupId,
+  coalesceWindowPlacements,
+} from '../shared/physical-groups.js';
 import { getSettings } from '../shared/storage.js';
 import { listUncachedEligibleTabs } from '../shared/refine-queue.js';
 import { buildTaskClusters } from '../shared/task-graph.js';
 import { shouldSkipUrl } from '../shared/url-utils.js';
-import { classifyPage } from './classifier.js';
+import { classifyPage, tryModelSameGroupJudge } from './classifier.js';
 import { loadPriors, loadSessionFeedback } from './nav-memory.js';
 import { attachLineage, hydrateLineage, patchLineage } from './tab-lineage.js';
+import {
+  getTabSummary,
+  hydrateTabSummaries,
+  upsertTabSummary,
+} from './tab-summaries.js';
 
 /** label(lower) → color index assignment cache per session */
 const labelColorIndex = new Map();
@@ -71,7 +83,7 @@ async function extractPageContentUnbound(tabId) {
     if (res?.ok) {
       return {
         title: res.title || '',
-        text: (res.text || '').slice(0, MAX_BODY_CHARS),
+        text: (res.text || '').slice(0, TAB_SUMMARY_SOURCE_CHARS),
         url: res.url || '',
       };
     }
@@ -83,7 +95,7 @@ async function extractPageContentUnbound(tabId) {
     const [{ result }] = await chrome.scripting.executeScript({
       target: { tabId },
       func: extractInPage,
-      args: [MAX_BODY_CHARS],
+      args: [TAB_SUMMARY_SOURCE_CHARS],
     });
     return result || null;
   } catch (err) {
@@ -158,8 +170,8 @@ function extractInPage(maxChars) {
 }
 
 /**
- * Place tabs into a physical group in ONE window. Does not merge different
- * task clusters that happen to share a topic title.
+ * Place tabs into a physical group in ONE window.
+ * Same normalized title → one group. Never create a second 「LinkE」 in the same window.
  * @param {number} windowId
  * @param {string} label
  * @param {number[]} tabIds
@@ -170,30 +182,35 @@ export async function placeTabsInGroup(windowId, label, tabIds) {
   const tabs = await chrome.tabs.query({ windowId });
   const inWindow = tabIds.filter((id) => tabs.some((t) => t.id === id));
   if (!inWindow.length) return;
-  const inWindowSet = new Set(inWindow);
   const none = chrome.tabGroups?.TAB_GROUP_ID_NONE ?? -1;
 
-  // Reuse a group only when it contains our tabs and no foreign task members.
-  /** @type {number | null} */
-  let reusable = null;
-  const seen = new Set();
-  for (const t of tabs) {
-    if (t.id == null || !inWindowSet.has(t.id)) continue;
-    if (typeof t.groupId !== 'number' || t.groupId === none || seen.has(t.groupId)) continue;
-    seen.add(t.groupId);
-    const foreign = tabs.some(
-      (other) => other.groupId === t.groupId && other.id != null && !inWindowSet.has(other.id),
-    );
-    if (!foreign) {
-      reusable = t.groupId;
-      break;
-    }
+  /** @type {{ id: number, title?: string }[]} */
+  let groups = [];
+  try {
+    groups = await chrome.tabGroups.query({ windowId });
+  } catch {
+    groups = [];
   }
+
+  const reusable = pickReusableGroupId({
+    groups,
+    windowTabs: tabs,
+    tabIds: inWindow,
+    label,
+    noneId: none,
+  });
+  const fold = extraTabIdsToFold({
+    groups,
+    windowTabs: tabs,
+    label,
+    already: inWindow,
+  });
+  const allIds = [...new Set([...inWindow, ...fold])];
 
   const groupId =
     reusable != null
-      ? (await chrome.tabs.group({ groupId: reusable, tabIds: inWindow }), reusable)
-      : await chrome.tabs.group({ tabIds: inWindow, createProperties: { windowId } });
+      ? (await chrome.tabs.group({ groupId: reusable, tabIds: allIds }), reusable)
+      : await chrome.tabs.group({ tabIds: allIds, createProperties: { windowId } });
 
   const color = pickColor(label);
   await chrome.tabGroups.update(groupId, { title: label, color, collapsed: false });
@@ -235,6 +252,7 @@ async function classifyAndCache(tab) {
       source: 'heuristic',
     };
     labelCache.set(tab.id, final);
+    upsertTabSummary(tab.id, page);
     void persistLabelCache();
     return final;
   } catch {
@@ -268,6 +286,7 @@ async function labelForTab(tab, fullExtract) {
 async function nodesFromTabs(tabs, opts = {}) {
   await hydrateLineage();
   await hydrateLabelCache();
+  await hydrateTabSummaries();
   const attached = attachLineage(tabs);
   const nodes = [];
   for (let i = 0; i < tabs.length; i++) {
@@ -275,12 +294,22 @@ async function nodesFromTabs(tabs, opts = {}) {
     if (tab.id == null || shouldSkipUrl(tab.url || attached[i].url)) continue;
     const full = opts.fullExtract === true || opts.onlyTabId === tab.id;
     const { label, source } = await labelForTab(tab, full);
+    const url = attached[i].url || tab.url || '';
+    let summary = getTabSummary(tab.id);
+    if (!summary || summary.url !== url) {
+      summary = upsertTabSummary(tab.id, {
+        title: tab.title || attached[i].title || '',
+        url,
+        text: '',
+      });
+    }
     nodes.push({
       ...attached[i],
       id: tab.id,
       windowId: tab.windowId,
       semanticLabel: label,
       source,
+      summary,
     });
   }
   return nodes;
@@ -289,14 +318,45 @@ async function nodesFromTabs(tabs, opts = {}) {
 /**
  * @param {import('../shared/task-graph.js').TaskNode[]} nodes
  */
-async function clusterNodes(nodes) {
+async function clusterNodes(nodes, opts = {}) {
   const [priors, session] = await Promise.all([loadPriors(), loadSessionFeedback()]);
-  return buildTaskClusters(nodes, {
+  const buildOpts = {
     timeWindowMs: TIME_ADJACENCY_MS,
     priors,
     sessionMerges: session.merges,
     sessionSplits: session.splits,
-  });
+  };
+  let clusters = buildTaskClusters(nodes, buildOpts);
+  if (opts.useModelJudge) {
+    clusters = await maybeApplyModelJudge(clusters, nodes, buildOpts);
+  }
+  return clusters;
+}
+
+/**
+ * Second layer: model same-group on summaries. Fail-soft; never blocks rules.
+ * @param {import('../shared/task-graph.js').TaskCluster[]} clusters
+ * @param {import('../shared/task-graph.js').TaskNode[]} nodes
+ * @param {object} buildOpts
+ */
+async function maybeApplyModelJudge(clusters, nodes, buildOpts) {
+  if (!clusters || clusters.length < 2) return clusters;
+  try {
+    const summariesByTab = new Map(nodes.map((n) => [n.id, n.summary]));
+    const payload = buildJudgePayload(clusters, summariesByTab);
+    const hasExcerpt = payload.clusters.some((c) => c.summaries.some((s) => s.excerpt || s.slugs?.length));
+    if (!hasExcerpt) return clusters;
+    const judgment = await withTimeout(
+      tryModelSameGroupJudge(payload),
+      MODEL_JUDGE_TIMEOUT_MS,
+      null,
+    );
+    if (!judgment?.merges?.length) return clusters;
+    return applyModelJudgment(nodes, clusters, judgment, buildOpts, buildTaskClusters);
+  } catch (err) {
+    console.warn('[SmartTabPilot] model same-group judge skipped', err);
+    return clusters;
+  }
 }
 
 /**
@@ -305,22 +365,11 @@ async function clusterNodes(nodes) {
  * @param {import('../shared/task-graph.js').TaskNode[]} nodes
  */
 async function applyPhysicalGroups(clusters, nodes) {
-  const nodeById = new Map(nodes.map((n) => [n.id, n]));
-  for (const cluster of clusters) {
-    /** @type {Map<number, number[]>} */
-    const byWindow = new Map();
-    for (const tabId of cluster.tabIds) {
-      const n = nodeById.get(tabId);
-      if (!n) continue;
-      if (!byWindow.has(n.windowId)) byWindow.set(n.windowId, []);
-      byWindow.get(n.windowId).push(tabId);
-    }
-    for (const [windowId, tabIds] of byWindow) {
-      try {
-        await placeTabsInGroup(windowId, cluster.label, tabIds);
-      } catch (err) {
-        console.warn('[SmartTabPilot] physical group failed', windowId, err);
-      }
+  for (const placement of coalesceWindowPlacements(clusters, nodes)) {
+    try {
+      await placeTabsInGroup(placement.windowId, placement.label, placement.tabIds);
+    } catch (err) {
+      console.warn('[SmartTabPilot] physical group failed', placement.windowId, err);
     }
   }
 }
@@ -433,10 +482,12 @@ async function refreshUncachedLabels(tabs, nodes, opts) {
           source: 'heuristic',
         };
         labelCache.set(tab.id, labeled);
+        const summary = upsertTabSummary(tab.id, { title, url, text });
         const node = byId.get(tab.id);
         if (node) {
           node.semanticLabel = labeled.label;
           node.source = labeled.source;
+          node.summary = summary;
         }
       } catch {
         if (tab.id != null && !labelCache.has(tab.id)) {
@@ -508,11 +559,16 @@ export async function groupTabs(opts = {}) {
           }
         : undefined,
     });
-    clusters = await clusterNodes(nodes);
+    clusters = await clusterNodes(nodes, { useModelJudge: true });
     if (applyPhysical) {
       await applyPhysicalGroups(clusters, nodes);
     }
     broadcastGroupProgress({ done: refineTotal, total: refineTotal, phase: 'done' });
+  } else {
+    clusters = await clusterNodes(nodes, { useModelJudge: true });
+    if (applyPhysical) {
+      await applyPhysicalGroups(clusters, nodes);
+    }
   }
 
   const sources = nodes.reduce((acc, n) => {
