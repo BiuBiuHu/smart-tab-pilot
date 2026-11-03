@@ -3,7 +3,13 @@
  */
 import { withDeadline } from '../shared/async-timeout.js';
 import { GROUP_RPC_TIMEOUT_MS, MSG, REFINE_STALL_MS } from '../shared/constants.js';
-import { planDragMerge } from '../shared/drag-merge.js';
+import {
+  buildTaskFeedbackPayload,
+  consumeDragClickSuppress,
+  dragStartPayload,
+  handleTaskDrop,
+  planMergePrev,
+} from '../shared/drag-merge.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -538,9 +544,12 @@ function onTaskDragStart(ev) {
   const tabBtn = ev.target.closest?.('.task-tab');
   const cluster = ev.target.closest?.('.task-cluster');
   if (!cluster) return;
-  const payload = tabBtn
-    ? { kind: 'tab', clusterId: cluster.dataset.clusterId, tabId: Number(tabBtn.dataset.tabId) }
-    : { kind: 'cluster', clusterId: cluster.dataset.clusterId };
+  const payload = dragStartPayload({
+    isTab: Boolean(tabBtn),
+    clusterId: cluster.dataset.clusterId,
+    tabId: tabBtn ? Number(tabBtn.dataset.tabId) : undefined,
+  });
+  if (!payload) return;
   ev.dataTransfer.effectAllowed = 'link';
   ev.dataTransfer.setData('application/json', JSON.stringify(payload));
   ev.dataTransfer.setData('text/plain', JSON.stringify(payload));
@@ -577,13 +586,11 @@ function onTaskDrop(ev) {
   if (!cluster) return;
   ev.preventDefault();
   cluster.classList.remove('drag-over');
-  let source;
-  try {
-    source = JSON.parse(ev.dataTransfer.getData('application/json') || ev.dataTransfer.getData('text/plain') || '{}');
-  } catch {
-    return;
-  }
-  const plan = planDragMerge(source, { clusterId: cluster.dataset.clusterId }, viewClusters);
+  const plan = handleTaskDrop({
+    dataJson: ev.dataTransfer.getData('application/json') || ev.dataTransfer.getData('text/plain') || '',
+    targetClusterId: cluster.dataset.clusterId,
+    clusters: viewClusters,
+  });
   if (!plan) return;
   void sendMergePlan(plan);
 }
@@ -591,8 +598,9 @@ function onTaskDrop(ev) {
 /** @param {MouseEvent} ev */
 function onTaskClustersClick(ev) {
   if (suppressTabClick) {
-    suppressTabClick = false;
-    if (ev.target.closest?.('.task-tab')) {
+    const consumed = consumeDragClickSuppress(true, Boolean(ev.target.closest?.('.task-tab')));
+    suppressTabClick = consumed.next;
+    if (consumed.ignore) {
       ev.preventDefault();
       return;
     }
@@ -609,10 +617,17 @@ function onTaskClustersClick(ev) {
   const index = Number(actionBtn.dataset.index);
   const action = actionBtn.dataset.action;
   if (action === 'merge-prev' && index > 0) {
-    void sendFeedback('merge', viewClusters[index - 1], viewClusters[index]);
+    const plan = planMergePrev(viewClusters, index);
+    if (plan) void sendMergePlan(plan);
   } else if (action === 'split') {
     void sendFeedback('split', viewClusters[index], null);
   }
+}
+
+async function sendMergePlan(plan) {
+  const payload = buildTaskFeedbackPayload(plan, { allWindows: allWindowsView });
+  if (!payload) return;
+  return sendFeedbackPayload(payload.action, payload.tabIds, payload.urlsA, payload.urlsB);
 }
 
 /**
@@ -620,10 +635,6 @@ function onTaskClustersClick(ev) {
  * @param {any} a
  * @param {any} b
  */
-async function sendMergePlan(plan) {
-  return sendFeedbackPayload('merge', plan.tabIds, plan.urlsA, plan.urlsB);
-}
-
 async function sendFeedback(action, a, b) {
   const tabsA = a?.tabs || [];
   const tabsB = b?.tabs || [];

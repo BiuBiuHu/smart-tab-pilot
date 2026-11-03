@@ -3,6 +3,7 @@
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { SAME_GROUP_SYSTEM_PROMPT } from '../shared/constants.js';
 import {
   applyModelJudgment,
   buildJudgePayload,
@@ -12,7 +13,7 @@ import {
   proposeCandidatePairs,
 } from '../shared/model-group-judge.js';
 import { buildTabSummary } from '../shared/tab-summary.js';
-import { buildTaskClusters } from '../shared/task-graph.js';
+import { buildTaskClusters, recordSessionFeedback } from '../shared/task-graph.js';
 
 function tab(partial) {
   return {
@@ -22,6 +23,8 @@ function tab(partial) {
     title: partial.title,
     semanticLabel: partial.semanticLabel,
     summary: partial.summary,
+    referrerUrl: partial.referrerUrl,
+    openerTabId: partial.openerTabId,
   };
 }
 
@@ -159,3 +162,235 @@ describe('buildJudgePayload / applyModelJudgment', () => {
     assert.equal(next.length, 2);
   });
 });
+
+/**
+ * Screenshot fixture: Bettr Promotion (5, cross-window) vs 批量发奖demo (4 yuque).
+ * Rules must not hard-merge them; the judge prompt must carry title+full URL+intro+nav
+ * so a model can merge (same BETTR project) or keep split (docs vs unrelated runtime).
+ */
+const BETTR_TABS = [
+  {
+    id: 101,
+    windowId: 3,
+    url: 'https://www.marmot-cloud.com/bettr/bettr-promotion/iteration',
+    title: 'bettr-promotion · Marmot',
+    semanticLabel: 'Bettr Promotion',
+    intro: '营销活动迭代控制台，配置 Bettr Promotion 活动。',
+    referrerUrl: '',
+  },
+  {
+    id: 102,
+    windowId: 3,
+    url: 'https://bettr-promotion-dev-unio.page.alipay.net/page/bettr-promotion/home',
+    title: 'bettr-promotion-dev-unio · 首页',
+    semanticLabel: 'Bettr Promotion',
+    intro: 'Unio 环境的 Bettr Promotion 工作台。',
+    openerTabId: 101,
+  },
+  {
+    id: 103,
+    windowId: 5,
+    url: 'https://bettr-promotion-dev-unio.page.alipay.net/page/bettr-promotion/activity',
+    title: 'bettr-promotion-dev-unio · 活动',
+    semanticLabel: 'Bettr Promotion',
+    intro: '活动列表页，与营销发奖同一产品。',
+  },
+  {
+    id: 104,
+    windowId: 5,
+    url: 'https://www.marmot-cloud.com/bettr/bettr-promotion/console',
+    title: 'bettr-promotion · Marmot',
+    semanticLabel: 'Bettr Promotion',
+    intro: 'Marmot 控制台，Bettr Promotion 运营。',
+  },
+  {
+    id: 105,
+    windowId: 5,
+    url: 'https://bettr-promotion-marketing-console.example.com/login',
+    title: 'bettr-promotion marketing console',
+    semanticLabel: 'Bettr Promotion',
+    intro: 'Marketing 登录页，同一 Bettr Promotion 产品。',
+  },
+];
+
+const YUQUE_TABS = [
+  {
+    id: 201,
+    windowId: 1,
+    url: 'https://yuque.antfin.com/ot2rzd/scbe7okvgau39lyf3ggg',
+    title: '创建权益demo（PRD 10.14更新版）',
+    semanticLabel: '批量发奖demo',
+    intro: 'BETTR Promotion 权益配置 PRD，说明如何创建权益。',
+  },
+  {
+    id: 202,
+    windowId: 1,
+    url: 'https://yuque.antfin.com/ot2rzd/scbe7o0nixq4awu8higy',
+    title: '活动管理demo',
+    semanticLabel: '批量发奖demo',
+    intro: 'BETTR 活动管理文档，对应 Promotion 活动后台。',
+  },
+  {
+    id: 203,
+    windowId: 1,
+    url: 'https://yuque.antfin.com/ot2rzd/scbe7ovhz5l0ld20nlgtt',
+    title: '批量发奖demo',
+    semanticLabel: '批量发奖demo',
+    intro: '批量发奖 demo 说明，对接 Bettr Promotion 发奖接口。',
+  },
+  {
+    id: 204,
+    windowId: 1,
+    url: 'https://yuque.antfin.com/ot2rzd/tech/bettr-prd',
+    title: 'BETTR信贷智能增长平台一期技术方案',
+    semanticLabel: '批量发奖demo',
+    intro: 'Bettr Promotion 一期技术方案与权益、活动、发奖。',
+  },
+];
+
+function screenshotNodes() {
+  return [...BETTR_TABS, ...YUQUE_TABS].map((t) =>
+    tab({
+      ...t,
+      summary: buildTabSummary({
+        title: t.title,
+        url: t.url,
+        text: t.intro,
+      }),
+      referrerUrl: t.referrerUrl,
+      openerTabId: t.openerTabId,
+    }),
+  );
+}
+
+/** Side-panel already shows two logical tasks (screenshot). */
+function screenshotSessionMerges() {
+  const a = recordSessionFeedback(
+    { merges: [], splits: [] },
+    'merge',
+    BETTR_TABS.map((t) => t.id),
+  );
+  return recordSessionFeedback(a, 'merge', YUQUE_TABS.map((t) => t.id));
+}
+
+function simulateJudge(nodes, modelRaw, buildOpts = {}) {
+  const clusters = buildTaskClusters(nodes, buildOpts);
+  const summaries = new Map(nodes.map((n) => [n.id, n.summary]));
+  const nodesById = new Map(nodes.map((n) => [n.id, n]));
+  const payload = buildJudgePayload(clusters, summaries, nodesById);
+  const userPrompt = formatJudgeUserPrompt(payload);
+  const fullPrompt = `${SAME_GROUP_SYSTEM_PROMPT}\n\n---\n${userPrompt}`;
+  const judgment = parseJudgeResponse(modelRaw);
+  const next = applyModelJudgment(nodes, clusters, judgment, buildOpts, buildTaskClusters);
+  return { clusters, payload, userPrompt, fullPrompt, judgment, next };
+}
+
+describe('SAME_GROUP_SYSTEM_PROMPT + screenshot judge simulation', () => {
+  it('system prompt requires title + full URL + intro and allows yuque↔Bettr when same project', () => {
+    assert.match(SAME_GROUP_SYSTEM_PROMPT, /page title/i);
+    assert.match(SAME_GROUP_SYSTEM_PROMPT, /full URL/i);
+    assert.match(SAME_GROUP_SYSTEM_PROMPT, /intro|summary/i);
+    assert.match(SAME_GROUP_SYSTEM_PROMPT, /Yuque|语雀/);
+    assert.match(SAME_GROUP_SYSTEM_PROMPT, /BETTR|Bettr/);
+    assert.match(SAME_GROUP_SYSTEM_PROMPT, /HINTS only|hints only/i);
+    assert.match(SAME_GROUP_SYSTEM_PROMPT, /two jobs|keep them separate/i);
+  });
+
+  it('rules do not hard-merge yuque docs with Bettr consoles (slug is not authority)', () => {
+    const nodes = screenshotNodes();
+    const { clusters } = simulateJudge(nodes, '{"merges":[]}');
+    const yuqueIds = new Set(YUQUE_TABS.map((t) => t.id));
+    const mixed = clusters.some(
+      (c) => c.tabIds.some((id) => yuqueIds.has(id)) && c.tabIds.some((id) => !yuqueIds.has(id)),
+    );
+    assert.equal(mixed, false, 'regex/slug must not union yuque with runtime');
+    assert.ok(clusters.length >= 2);
+  });
+
+  it('judge user prompt carries title + full URL + intro + nav for every screenshot tab', () => {
+    const nodes = screenshotNodes();
+    const { payload, userPrompt } = simulateJudge(nodes, '{"merges":[]}');
+    const summaries = payload.clusters.flatMap((c) => c.summaries);
+    assert.equal(summaries.length, 9);
+    for (const s of summaries) {
+      assert.ok(s.title, `tab ${s.tabId} missing title`);
+      assert.ok(s.url.startsWith('http'), `tab ${s.tabId} missing full URL`);
+      assert.ok(s.intro, `tab ${s.tabId} missing intro`);
+      assert.match(userPrompt, new RegExp(`title: ${s.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+      assert.match(userPrompt, new RegExp(`url: ${s.url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+      assert.match(userPrompt, new RegExp(`intro: ${s.intro.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+    }
+    assert.match(userPrompt, /nav: openerTab 101/);
+    assert.match(userPrompt, /Decide from title \+ full URL \+ intro/);
+    assert.ok(!userPrompt.includes('BODY'));
+    const hinted = proposeCandidatePairs(
+      payload.clusters.map((c) => ({ id: c.id, tabIds: c.tabIds, label: c.label })),
+      new Map(nodes.map((n) => [n.id, n.summary])),
+      new Map(nodes.map((n) => [n.id, n])),
+    );
+    assert.ok(
+      hinted.length >= 1,
+      'lexical/title overlap should propose yuque↔Bettr as a candidate, not a decision',
+    );
+  });
+
+  it('scripted model merge (same BETTR project) joins the two screenshot tasks', () => {
+    const nodes = screenshotNodes();
+    const session = screenshotSessionMerges();
+    const { clusters, next, judgment } = simulateJudge(
+      nodes,
+      '```json\n{"merges":[[101,201]]}\n```',
+      { sessionMerges: session.merges },
+    );
+    assert.deepEqual(judgment.merges, [[101, 201]]);
+    assert.equal(clusters.length, 2);
+    assert.equal(next.length, 1);
+    assert.equal(next[0].tabIds.length, 9);
+    assert.ok(next[0].edges.model >= 1);
+    assert.match(next[0].label, /Bettr Promotion/i);
+  });
+
+  it('scripted model empty keeps docs vs runtime split when intent differs', () => {
+    const nodes = screenshotNodes();
+    const session = screenshotSessionMerges();
+    const { next } = simulateJudge(nodes, '{"merges":[]}', { sessionMerges: session.merges });
+    assert.equal(next.length, 2);
+    const yuqueIds = new Set(YUQUE_TABS.map((t) => t.id));
+    const mixed = next.some(
+      (c) => c.tabIds.some((id) => yuqueIds.has(id)) && c.tabIds.some((id) => !yuqueIds.has(id)),
+    );
+    assert.equal(mixed, false);
+  });
+
+  it('rich fields distinguish unrelated docs (no BETTR tokens) from Promotion runtime', () => {
+    const nodes = [
+      ...BETTR_TABS.map((t) =>
+        tab({
+          ...t,
+          summary: buildTabSummary({ title: t.title, url: t.url, text: t.intro }),
+        }),
+      ),
+      tab({
+        id: 301,
+        windowId: 1,
+        url: 'https://yuque.antfin.com/other-team/oncall/runbook',
+        title: '机房值班手册',
+        semanticLabel: '值班',
+        summary: buildTabSummary({
+          title: '机房值班手册',
+          url: 'https://yuque.antfin.com/other-team/oncall/runbook',
+          text: '网络故障升级路径，与营销发奖无关。',
+        }),
+      }),
+    ];
+    const { userPrompt, payload } = simulateJudge(nodes, '{"merges":[]}');
+    assert.match(userPrompt, /机房值班手册/);
+    assert.match(userPrompt, /网络故障升级路径/);
+    const duty = payload.clusters
+      .flatMap((c) => c.summaries)
+      .find((s) => s.tabId === 301);
+    assert.ok(duty);
+    assert.ok(!/bettr|promotion|信贷/i.test(`${duty.title} ${duty.intro}`));
+  });
+});
+

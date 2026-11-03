@@ -75,8 +75,8 @@ Chrome `tabs.Tab` **没有** `createdAt`，时间边只使用本扩展观察到�
 npm test
 ```
 
-覆盖：opener 混主题仍一团、同域不同主题拆开、时间+冲突主题不并、学习边、反馈 merge/split、跨窗 URL 匹配、浅模式拒绝、Bettr 项目亲和、短摘要不落盘正文、同窗同名物理组合并。
+覆盖：opener 混主题仍一团、同域不同主题拆开、时间+冲突主题不并、学习边、反馈 merge/split、跨窗 URL 匹配、浅模式拒绝、Bettr 项目亲和、短摘要不落盘正文、同窗同名物理组合并、侧栏拖拽任意任务/标签合并（含 HTML5 dataTransfer 仿真与学习 +0.35）、模型同组入参（标题+完整 URL+短摘要+nav）以及截图场景（Bettr Promotion × 语雀）的脚本化 judge 合并/拆分。
 
-## 7. 手工要点
+## 7. 本环境无法远程验证的部分
 
-见 `05-testing/manual-checklist.md`。本环境无真实 Chrome 扩展宿主，物理 `tabGroups` / 侧栏需 Load unpacked 验收。
+见 `05-testing/manual-checklist.md`。本 VM 没有可加载的 Chrome 扩展宿主，因此 **物理** `chrome.tabGroups` 着色、侧栏真实指针拖拽的像素命中无法在这里跑。对应逻辑已由 `npm test` 覆盖（`tests/drag-merge.test.mjs`、`tests/model-group-judge.test.mjs`、`tests/physical-groups.test.mjs`）。不要把 Load unpacked 当作验收步骤。
