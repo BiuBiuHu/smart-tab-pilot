@@ -21,6 +21,11 @@ export const DEFAULT_SETTINGS = {
   customBaseUrl: '',
   customApiKey: '',
   customModel: 'gpt-4o-mini',
+  /**
+   * Side-panel language: auto follows chrome.i18n / navigator (fallback zh).
+   * Force with 'zh' or 'en'.
+   */
+  uiLocale: 'auto',
 };
 
 /**

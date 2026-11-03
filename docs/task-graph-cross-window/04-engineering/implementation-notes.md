@@ -20,6 +20,7 @@
 | 侧栏 | `sidepanel/*` | 全部窗口 / 仅当前窗口；合并/拆分/关闭本组；设置面板收模型配置 |
 | 关闭本组 | `shared/close-group.js` + `background/close-group.js` | 按视图范围 `tabs.remove`；剪掉会话 tabId 边 |
 | 设置页 | `shared/settings-panel.js` | 与任务视图互斥的整页；「返回任务视图」切回 |
+| 中英 UI | `shared/i18n.js` + `_locales/` | `t()` + 设置页语言开关（auto/zh/en）；默认跟随浏览器，否则中文 |
 
 ## 2. 算法草图（已实现，非假设）
 

@@ -1,0 +1,14 @@
+{
+  "extName": {
+    "message": "Smart Tab Pilot"
+  },
+  "extDescription": {
+    "message": "Exact URL dedupe (cross-window jump) plus a task navigation graph (source/time first, semantics refine). Optional quick search. Side-panel UI."
+  },
+  "actionTitle": {
+    "message": "Smart Tab Pilot"
+  },
+  "commandOpen": {
+    "message": "Open the Smart Tab Pilot side panel"
+  }
+}

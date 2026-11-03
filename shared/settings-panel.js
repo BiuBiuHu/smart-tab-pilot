@@ -22,13 +22,22 @@ export function nextPanelView(current, action) {
   return now;
 }
 
+const DEFAULT_COPY = {
+  settings: '设置',
+  settingsCurrentTitle: '当前：设置',
+  settingsCurrentAria: '当前视图：设置',
+  backToTasks: '返回任务视图',
+};
+
 /**
  * @param {PanelView | boolean} view
- * @param {{ quickSearchOn?: boolean }} [opts]
+ * @param {{ quickSearchOn?: boolean, t?: (key: string) => string }} [opts]
  */
 export function panelViewState(view, opts = {}) {
   const settings = view === true || view === 'settings';
   const quickSearchOn = Boolean(opts.quickSearchOn);
+  const translate =
+    typeof opts.t === 'function' ? opts.t : (key) => DEFAULT_COPY[key] ?? key;
   return {
     view: settings ? 'settings' : 'tasks',
     settingsHidden: !settings,
@@ -36,14 +45,14 @@ export function panelViewState(view, opts = {}) {
     searchHidden: settings || !quickSearchOn,
     headerHintHidden: settings,
     settingsTrigger: {
-      title: settings ? '当前：设置' : '设置',
-      'aria-label': settings ? '当前视图：设置' : '设置',
+      title: settings ? translate('settingsCurrentTitle') : translate('settings'),
+      'aria-label': settings ? translate('settingsCurrentAria') : translate('settings'),
       'aria-pressed': settings ? 'true' : 'false',
       'aria-controls': SETTINGS_PANEL_ID,
     },
     back: {
-      title: '返回任务视图',
-      'aria-label': '返回任务视图',
+      title: translate('backToTasks'),
+      'aria-label': translate('backToTasks'),
       hidden: !settings,
     },
   };

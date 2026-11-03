@@ -624,7 +624,7 @@ export async function getTaskView(opts = {}) {
   const windowOrder = windows.map((w) => w.id).sort((a, b) => a - b);
   const windowBadge = new Map();
   windowOrder.forEach((id, i) => {
-    windowBadge.set(id, id === focusedId ? '当前' : `窗口 ${i + 1}`);
+    windowBadge.set(id, id === focusedId ? 'current' : `w:${i + 1}`);
   });
 
   const eligible = allTabs.filter((t) => t.id != null && !shouldSkipUrl(t.url));
@@ -644,7 +644,7 @@ export async function getTaskView(opts = {}) {
           return {
             tabId: id,
             windowId: n.windowId,
-            windowBadge: windowBadge.get(n.windowId) || `窗口`,
+            windowBadge: windowBadge.get(n.windowId) || 'window',
             title: t.title || n.url || '',
             url: t.url || n.url || '',
             favIconUrl: t.favIconUrl || '',

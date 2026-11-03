@@ -85,6 +85,8 @@ describe('sidepanel HTML: settings page vs task surface', () => {
     assert.match(settings, /Gemini Nano/);
     assert.match(settings, /Prompt API/);
     assert.match(settings, /id="custom-base-url"/);
+    assert.match(settings, /id="language-section"/);
+    assert.match(settings, /id="locale-auto"/);
     assert.match(task, /id="btn-group-now"/);
     assert.match(task, /id="btn-refresh-tasks"/);
     assert.match(task, /id="scope-all"/);

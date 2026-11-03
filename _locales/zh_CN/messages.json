@@ -1,0 +1,14 @@
+{
+  "extName": {
+    "message": "Smart Tab Pilot"
+  },
+  "extDescription": {
+    "message": "精确 URL 去重（跨窗口跳转）+ 任务导航图归组（来源/时间优先，语义精炼）；可选快速搜索；Chrome 侧边栏 UI"
+  },
+  "actionTitle": {
+    "message": "Smart Tab Pilot"
+  },
+  "commandOpen": {
+    "message": "打开 Smart Tab Pilot 侧边栏"
+  }
+}

@@ -36,7 +36,8 @@ Manifest V3 Chrome 扩展：**精确 URL 去重跳转（跨窗口）** + **任�
 
 5. **侧边栏 UI**  
    - 使用 `chrome.sidePanel`；点击工具栏图标（或快捷键）打开并占满浏览器侧栏。  
-   - 不再使用 action popup。
+   - 不再使用 action popup。  
+   - 界面语言：设置页可选 **跟随浏览器 / 中文 / English**（`uiLocale`，默认跟随浏览器，否则中文）。
 
 ## 如何加载（Load unpacked）
 
@@ -68,7 +69,7 @@ Manifest V3 Chrome 扩展：**精确 URL 去重跳转（跨窗口）** + **任�
 3. 或按 **Ctrl+Shift+K** / **⌘⇧K**（`commands._execute_action`，可在 `chrome://extensions/shortcuts` 修改）。  
 4. 修改代码后：在 `chrome://extensions` 点 **重新加载**，必要时关掉再点开侧边栏。
 
-## 侧边栏说明（中文 UI）
+## 侧边栏说明
 
 | 控件 | 作用 |
 |------|------|
@@ -84,6 +85,8 @@ Manifest V3 Chrome 扩展：**精确 URL 去重跳转（跨窗口）** + **任�
 | 拖到另一任务上合并 / 拆成独立任务 | 任意一对任务或把标签拖进目标任务；加强该对学习权重 |
 | 自动按任务归组 | 页面 load complete 后按任务导航图进组 |
 | 自定义模型字段 | Base URL / API Key / 模型名（只给任务命名，不按域名并组） |
+| 关闭本组 | 按当前窗口范围关闭该逻辑任务下的标签 |
+| 界面语言 | 跟随浏览器 / 中文 / English；选择会持久化 |
 
 ## 目录结构
 
@@ -92,6 +95,7 @@ smart-tab-pilot/
 ├── manifest.json
 ├── LICENSE                 # MIT
 ├── README.md
+├── _locales/               # CWS / chrome.i18n（en + zh_CN）
 ├── icons/                  # 扩展图标
 ├── background/
 │   ├── service-worker.js   # MV3 入口
@@ -114,6 +118,7 @@ smart-tab-pilot/
 │   └── task-graph-cross-window/      # 任务导航图 + 跨窗口
 ├── popup/                  # 旧弹窗（未使用，仅对照）
 └── shared/
+    ├── i18n.js             # 侧栏 zh/en 文案 + t()
     ├── constants.js
     ├── storage.js
     ├── url-utils.js

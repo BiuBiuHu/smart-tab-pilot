@@ -1,8 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "Smart Tab Pilot",
+  "default_locale": "en",
+  "name": "__MSG_extName__",
   "version": "1.4.0",
-  "description": "精确 URL 去重（跨窗口跳转）+ 任务导航图归组（来源/时间优先，语义精炼）；可选快速搜索；Chrome 侧边栏 UI",
+  "description": "__MSG_extDescription__",
   "permissions": [
     "tabs",
     "tabGroups",
@@ -19,7 +20,7 @@
     "type": "module"
   },
   "action": {
-    "default_title": "Smart Tab Pilot",
+    "default_title": "__MSG_actionTitle__",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",
@@ -36,7 +37,7 @@
         "default": "Ctrl+Shift+K",
         "mac": "Command+Shift+K"
       },
-      "description": "打开 Smart Tab Pilot 侧边栏"
+      "description": "__MSG_commandOpen__"
     }
   },
   "icons": {

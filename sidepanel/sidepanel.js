@@ -1,9 +1,16 @@
 /**
- * Side panel UI — 任务导航图视图 + 中文开关；快速搜索默认关闭。
+ * Side panel UI — task navigation graph + zh/en i18n; quick search off by default.
  */
 import { withDeadline } from '../shared/async-timeout.js';
 import { GROUP_RPC_TIMEOUT_MS, MSG, REFINE_STALL_MS } from '../shared/constants.js';
 import { buildCloseGroupPayload } from '../shared/close-group.js';
+import {
+  applyDomI18n,
+  createTranslator,
+  detectBrowserLocale,
+  formatWindowBadge,
+  resolveLocale,
+} from '../shared/i18n.js';
 import { nextPanelView, panelViewState } from '../shared/settings-panel.js';
 import {
   buildTaskFeedbackPayload,
@@ -46,15 +53,26 @@ const panelHintEl = $('panel-hint');
 const searchInput = $('search-input');
 const searchResults = $('search-results');
 const searchEmpty = $('search-empty');
+const localeAuto = $('locale-auto');
+const localeZh = $('locale-zh');
+const localeEn = $('locale-en');
 
-const AVAIL_LABELS = {
-  available: { text: '可用', cls: 'badge-ok' },
-  readily: { text: '可用', cls: 'badge-ok' },
-  downloadable: { text: '可下载', cls: 'badge-warn' },
-  downloading: { text: '下载中…', cls: 'badge-warn' },
-  unavailable: { text: '不可用', cls: 'badge-bad' },
-  missing: { text: 'API 缺失', cls: 'badge-bad' },
+const AVAIL_KEYS = {
+  available: { key: 'nanoAvailable', cls: 'badge-ok' },
+  readily: { key: 'nanoAvailable', cls: 'badge-ok' },
+  downloadable: { key: 'nanoDownloadable', cls: 'badge-warn' },
+  downloading: { key: 'nanoDownloading', cls: 'badge-warn' },
+  unavailable: { key: 'nanoUnavailable', cls: 'badge-bad' },
+  missing: { key: 'nanoMissing', cls: 'badge-bad' },
 };
+
+/** @type {'auto'|'zh'|'en'} */
+let uiLocalePref = 'auto';
+let translate = createTranslator(resolveLocale('auto', detectBrowserLocale()));
+/** @param {string} key @param {Record<string, unknown>} [vars] */
+function t(key, vars) {
+  return translate(key, vars);
+}
 
 /** @type {{ kind: string, tabId?: number, windowId?: number, url?: string, title?: string }[]} */
 let flatResults = [];
@@ -68,12 +86,17 @@ let allWindowsView = true;
 let viewCurrentWindowId = null;
 /** @type {'tasks'|'settings'} */
 let panelView = 'tasks';
+/** @type {any} */
+let lastTaskViewRes = null;
+/** @type {string} */
+let lastNanoAvail = 'unavailable';
 
 init();
 
 async function init() {
   bind();
-  await Promise.all([refreshNano(), loadSettings()]);
+  await loadSettings();
+  await refreshNano();
   await refreshTaskView();
   if (quickSearchOn) {
     searchInput.focus();
@@ -117,6 +140,9 @@ function bind() {
   btnRefreshTasks.addEventListener('click', () => void refreshTaskView());
   scopeAll.addEventListener('change', onScopeChange);
   scopeCurrent.addEventListener('change', onScopeChange);
+  localeAuto?.addEventListener('change', onLocaleChange);
+  localeZh?.addEventListener('change', onLocaleChange);
+  localeEn?.addEventListener('change', onLocaleChange);
   taskClustersEl.addEventListener('click', onTaskClustersClick);
   taskClustersEl.addEventListener('dragstart', onTaskDragStart);
   taskClustersEl.addEventListener('dragend', onTaskDragEnd);
@@ -148,8 +174,33 @@ function setPanelView(view) {
   applyPanelView();
 }
 
+function applyLocale() {
+  const locale = resolveLocale(uiLocalePref, detectBrowserLocale());
+  translate = createTranslator(locale);
+  document.documentElement.lang = locale === 'en' ? 'en' : 'zh-CN';
+  applyDomI18n(document, t);
+  applyPanelView();
+}
+
+function applyLocaleRadios() {
+  if (localeAuto) localeAuto.checked = uiLocalePref === 'auto';
+  if (localeZh) localeZh.checked = uiLocalePref === 'zh';
+  if (localeEn) localeEn.checked = uiLocalePref === 'en';
+}
+
+async function onLocaleChange() {
+  const next = localeEn?.checked ? 'en' : localeZh?.checked ? 'zh' : 'auto';
+  uiLocalePref = next;
+  applyLocaleRadios();
+  applyLocale();
+  await savePartial({ uiLocale: uiLocalePref });
+  await refreshNano();
+  if (lastTaskViewRes) renderTaskView(lastTaskViewRes);
+  if (quickSearchOn) await runSearch(searchInput.value || '');
+}
+
 function applyPanelView() {
-  const state = panelViewState(panelView, { quickSearchOn });
+  const state = panelViewState(panelView, { quickSearchOn, t });
   if (settingsPanelEl) settingsPanelEl.hidden = state.settingsHidden;
   if (taskViewCard) taskViewCard.hidden = state.taskHidden;
   if (searchCard) searchCard.hidden = state.searchHidden;
@@ -180,7 +231,7 @@ async function send(type, payload, timeoutMs = GROUP_RPC_TIMEOUT_MS) {
   return withDeadline(
     chrome.runtime.sendMessage({ type, payload }),
     timeoutMs,
-    '后台响应超时，请重试',
+    t('rpcTimeout'),
   );
 }
 
@@ -209,14 +260,14 @@ function renderResults(openHits, closedHits) {
   const frag = document.createDocumentFragment();
 
   if (openHits.length) {
-    frag.appendChild(sectionLabel('打开的标签'));
+    frag.appendChild(sectionLabel(t('searchOpenSection')));
     for (const hit of openHits) {
       flatResults.push(hit);
       frag.appendChild(resultButton(hit, flatResults.length - 1));
     }
   }
   if (closedHits.length) {
-    frag.appendChild(sectionLabel('最近关闭'));
+    frag.appendChild(sectionLabel(t('searchClosedSection')));
     for (const hit of closedHits) {
       flatResults.push(hit);
       frag.appendChild(resultButton(hit, flatResults.length - 1));
@@ -226,7 +277,11 @@ function renderResults(openHits, closedHits) {
   searchResults.appendChild(frag);
   const empty = flatResults.length === 0;
   searchEmpty.hidden = !empty;
-  searchEmpty.textContent = empty ? (searchInput.value.trim() ? '无匹配结果' : '暂无标签可显示') : '';
+  searchEmpty.textContent = empty
+    ? searchInput.value.trim()
+      ? t('searchNoMatch')
+      : t('searchNoTabs')
+    : '';
 }
 
 function sectionLabel(text) {
@@ -268,7 +323,7 @@ function resultButton(hit, index) {
 
   const tag = document.createElement('span');
   tag.className = 'tag';
-  tag.textContent = hit.kind === 'open' ? '打开' : '关闭';
+  tag.textContent = hit.kind === 'open' ? t('searchTagOpen') : t('searchTagClosed');
 
   btn.append(fav, meta, tag);
   return btn;
@@ -339,8 +394,9 @@ async function refreshNano() {
   try {
     const res = await send(MSG.GET_NANO_STATUS);
     const avail = res?.availability || 'unavailable';
-    const meta = AVAIL_LABELS[avail] || AVAIL_LABELS.unavailable;
-    nanoStatusEl.textContent = meta.text;
+    lastNanoAvail = avail;
+    const meta = AVAIL_KEYS[avail] || AVAIL_KEYS.unavailable;
+    nanoStatusEl.textContent = t(meta.key);
     nanoStatusEl.className = `badge ${meta.cls}`;
     nanoDetailEl.textContent = res?.detail || statusHint(avail);
 
@@ -350,7 +406,8 @@ async function refreshNano() {
 
     updateFallbackHint(avail);
   } catch (err) {
-    nanoStatusEl.textContent = '检测失败';
+    lastNanoAvail = 'missing';
+    nanoStatusEl.textContent = t('nanoDetectFailed');
     nanoStatusEl.className = 'badge badge-bad';
     nanoDetailEl.textContent = err instanceof Error ? err.message : String(err);
     btnDownload.hidden = true;
@@ -362,15 +419,15 @@ function statusHint(avail) {
   switch (avail) {
     case 'available':
     case 'readily':
-      return '将优先使用设备端 Gemini Nano 给任务簇打主题名（同网站不同主题仍会分任务）。';
+      return t('nanoHintAvailable');
     case 'downloadable':
-      return '模型尚未下载。请点击下方按钮（需用户手势）触发下载。';
+      return t('nanoHintDownloadable');
     case 'downloading':
-      return '模型正在下载，请稍候再试。';
+      return t('nanoHintDownloading');
     case 'unavailable':
-      return '当前环境无法使用 Nano。可配置下方自定义模型，或使用启发式主题名（任务簇仍以来源/时间为准）。';
+      return t('nanoHintUnavailable');
     case 'missing':
-      return '浏览器未暴露 LanguageModel。请使用支持 Prompt API 的 Chrome（实验旗标 / 足够新的版本）。';
+      return t('nanoHintMissing');
     default:
       return '';
   }
@@ -384,30 +441,29 @@ function updateFallbackHint(avail) {
   }
   const hasCustom = !!(customBaseUrl.value && customApiKey.value);
   if (hasCustom) {
-    fallbackHint.textContent = '当前将使用自定义模型为任务簇命名（分组本身按任务导航图，非域名）。';
+    fallbackHint.textContent = t('fallbackCustom');
   } else {
-    fallbackHint.textContent =
-      '无可用模型时，任务簇以来源/时间/学习边聚合，主题名用启发式（不会用域名作为组名）。';
+    fallbackHint.textContent = t('fallbackHeuristic');
   }
 }
 
 async function onDownloadNano() {
   btnDownload.disabled = true;
-  btnDownload.textContent = '正在请求下载…';
-  if (nanoDetailEl) nanoDetailEl.textContent = '正在请求下载…';
+  btnDownload.textContent = t('nanoDownloadingBtn');
+  if (nanoDetailEl) nanoDetailEl.textContent = t('nanoDownloadingBtn');
   try {
     const res = await send(MSG.DOWNLOAD_NANO);
     if (nanoDetailEl) {
       nanoDetailEl.textContent = res?.ok
-        ? '已触发 Nano 下载 / 会话创建。'
-        : `下载失败：${res?.error || '未知错误'}`;
+        ? t('nanoDownloadOk')
+        : t('nanoDownloadFail', { error: res?.error || t('unknownError') });
     }
   } catch (err) {
     if (nanoDetailEl) {
       nanoDetailEl.textContent = err instanceof Error ? err.message : String(err);
     }
   } finally {
-    btnDownload.textContent = '下载 / 启用 Nano 模型';
+    btnDownload.textContent = t('nanoDownloadBtn');
     await refreshNano();
   }
 }
@@ -426,8 +482,10 @@ async function loadSettings() {
   customBaseUrl.value = s.customBaseUrl || '';
   customApiKey.value = s.customApiKey || '';
   customModel.value = s.customModel || 'gpt-4o-mini';
-  const availGuess = nanoStatusEl.textContent === '可用' ? 'available' : 'unavailable';
-  updateFallbackHint(availGuess);
+  uiLocalePref = s.uiLocale === 'zh' || s.uiLocale === 'en' ? s.uiLocale : 'auto';
+  applyLocaleRadios();
+  applyLocale();
+  updateFallbackHint(lastNanoAvail);
 }
 
 async function savePartial(partial) {
@@ -443,7 +501,7 @@ async function onSaveCustom() {
       customModel: customModel.value.trim() || 'gpt-4o-mini',
     });
     await refreshNano();
-    if (fallbackHint) fallbackHint.textContent = '自定义模型已保存。';
+    if (fallbackHint) fallbackHint.textContent = t('customSaved');
   } finally {
     btnSaveCustom.disabled = false;
   }
@@ -468,15 +526,14 @@ async function refreshTaskView() {
 
 /** @param {any} res */
 function renderTaskView(res) {
+  lastTaskViewRes = res;
   viewClusters = res?.clusters || [];
   viewCurrentWindowId = res?.currentWindowId ?? null;
   taskClustersEl.innerHTML = '';
   if (!viewClusters.length) {
     taskClustersEl.hidden = true;
     taskEmpty.hidden = false;
-    taskEmpty.textContent = allWindowsView
-      ? '当前没有可展示的 http(s) 标签。打开几个页面后再刷新。'
-      : '当前窗口没有可展示的标签。可切换到「全部窗口」。';
+    taskEmpty.textContent = allWindowsView ? t('taskEmptyAll') : t('taskEmptyCurrent');
     return;
   }
   taskEmpty.hidden = true;
@@ -501,8 +558,9 @@ function renderCluster(cluster, index) {
   headText.className = 'task-cluster-head-text';
   const title = document.createElement('div');
   title.className = 'task-cluster-title';
-  const winNote = cluster.windowIds && cluster.windowIds.length > 1 ? ' · 跨窗口（逻辑）' : '';
-  title.textContent = `${cluster.label || '未分类'} · ${cluster.tabs.length} 个标签${winNote}`;
+  const winNote = cluster.windowIds && cluster.windowIds.length > 1 ? t('clusterCrossWindow') : '';
+  title.textContent =
+    t('clusterTitle', { label: cluster.label || t('uncategorized'), n: cluster.tabs.length }) + winNote;
   const meta = document.createElement('div');
   meta.className = 'task-cluster-meta';
   meta.textContent = edgeSummary(cluster.edges);
@@ -514,9 +572,9 @@ function renderCluster(cluster, index) {
   closeBtn.dataset.action = 'close-group';
   closeBtn.dataset.clusterId = cluster.id;
   closeBtn.dataset.index = String(index);
-  closeBtn.textContent = '关闭本组';
-  closeBtn.title = '关闭本组';
-  closeBtn.setAttribute('aria-label', '关闭本组');
+  closeBtn.textContent = t('closeGroup');
+  closeBtn.title = t('closeGroup');
+  closeBtn.setAttribute('aria-label', t('closeGroup'));
   head.append(headText, closeBtn);
 
   const actions = document.createElement('div');
@@ -527,12 +585,12 @@ function renderCluster(cluster, index) {
     mergeBtn.className = 'btn-text';
     mergeBtn.dataset.action = 'merge-prev';
     mergeBtn.dataset.index = String(index);
-    mergeBtn.textContent = '与上一任务合并';
+    mergeBtn.textContent = t('mergePrev');
     actions.appendChild(mergeBtn);
   }
   const dragHint = document.createElement('span');
   dragHint.className = 'drag-hint';
-  dragHint.textContent = '拖到另一任务上合并';
+  dragHint.textContent = t('dragHint');
   actions.appendChild(dragHint);
   if (cluster.tabs.length > 1) {
     const splitBtn = document.createElement('button');
@@ -540,7 +598,7 @@ function renderCluster(cluster, index) {
     splitBtn.className = 'btn-text';
     splitBtn.dataset.action = 'split';
     splitBtn.dataset.index = String(index);
-    splitBtn.textContent = '拆成独立任务';
+    splitBtn.textContent = t('splitTask');
     actions.appendChild(splitBtn);
   }
 
@@ -565,7 +623,7 @@ function renderTaskTab(tab) {
 
   const badge = document.createElement('span');
   badge.className = 'win-badge';
-  badge.textContent = tab.windowBadge || '窗口';
+  badge.textContent = formatWindowBadge(tab.windowBadge, t);
 
   const meta = document.createElement('span');
   meta.className = 'meta';
@@ -583,16 +641,16 @@ function renderTaskTab(tab) {
 
 /** @param {any} edges */
 function edgeSummary(edges) {
-  if (!edges) return '任务导航图';
+  if (!edges) return t('edgeGraph');
   const parts = [];
-  if (edges.opener) parts.push(`来源×${edges.opener}`);
-  if (edges.referrer) parts.push(`引用×${edges.referrer}`);
-  if (edges.project) parts.push(`项目×${edges.project}`);
-  if (edges.time) parts.push(`时间×${edges.time}`);
-  if (edges.learned) parts.push(`学习×${edges.learned}`);
-  if (edges.feedback) parts.push(`反馈×${edges.feedback}`);
-  if (edges.model) parts.push(`模型×${edges.model}`);
-  return parts.length ? parts.join(' · ') : '独立任务';
+  if (edges.opener) parts.push(t('edgeOpener', { n: edges.opener }));
+  if (edges.referrer) parts.push(t('edgeReferrer', { n: edges.referrer }));
+  if (edges.project) parts.push(t('edgeProject', { n: edges.project }));
+  if (edges.time) parts.push(t('edgeTime', { n: edges.time }));
+  if (edges.learned) parts.push(t('edgeLearned', { n: edges.learned }));
+  if (edges.feedback) parts.push(t('edgeFeedback', { n: edges.feedback }));
+  if (edges.model) parts.push(t('edgeModel', { n: edges.model }));
+  return parts.length ? parts.join(' · ') : t('edgeSolo');
 }
 
 let suppressTabClick = false;
@@ -696,8 +754,8 @@ async function sendCloseGroup(cluster) {
     currentWindowId: viewCurrentWindowId,
   });
   actionResult.textContent = payload.tabIds.length
-    ? `正在关闭 ${payload.tabIds.length} 个标签…`
-    : '本组没有可关闭的标签';
+    ? t('closingTabs', { n: payload.tabIds.length })
+    : t('closeNone');
   if (!payload.tabIds.length) return;
   try {
     const res = await send(MSG.CLOSE_TASK_GROUP, payload);
@@ -706,10 +764,10 @@ async function sendCloseGroup(cluster) {
     const gone = Number(res?.alreadyGone) || 0;
     actionResult.textContent =
       closed > 0
-        ? `已关闭本组 ${closed} 个标签`
+        ? t('closedTabs', { n: closed })
         : gone > 0
-          ? '本组标签已不在'
-          : '没有关闭任何标签';
+          ? t('closeAlreadyGone')
+          : t('closeNothing');
   } catch (err) {
     actionResult.textContent = err instanceof Error ? err.message : String(err);
   }
@@ -745,7 +803,7 @@ async function sendFeedback(action, a, b) {
  * @param {string[]} urlsB
  */
 async function sendFeedbackPayload(action, tabIds, urlsA, urlsB) {
-  actionResult.textContent = action === 'merge' ? '正在合并任务…' : '正在拆分任务…';
+  actionResult.textContent = action === 'merge' ? t('merging') : t('splitting');
   try {
     const res = await send(MSG.TASK_FEEDBACK, {
       action,
@@ -755,10 +813,7 @@ async function sendFeedbackPayload(action, tabIds, urlsA, urlsB) {
       allWindows: allWindowsView,
     });
     renderTaskView(res);
-    actionResult.textContent =
-      action === 'merge'
-        ? '已合并：会加强这两类导航的学习权重。'
-        : '已拆分：本次会话不再把这些标签并成同一任务。';
+    actionResult.textContent = action === 'merge' ? t('mergedOk') : t('splitOk');
   } catch (err) {
     actionResult.textContent = err instanceof Error ? err.message : String(err);
   }
@@ -773,9 +828,9 @@ function updateGroupProgress(done, total, phase) {
   if (groupProgressText) {
     if (phase === 'quick') {
       groupProgressText.textContent =
-        total > 0 ? `已快速成组，正在精炼标题 0/${total}` : '已快速成组，无需精炼';
+        total > 0 ? t('quickRefine', { total }) : t('quickNoRefine');
     } else {
-      groupProgressText.textContent = `已处理 ${done}/${total}`;
+      groupProgressText.textContent = t('processed', { done, total });
     }
   }
 }
@@ -788,9 +843,7 @@ function hideGroupProgress() {
 async function onGroupNow() {
   btnGroupNow.disabled = true;
   hideGroupProgress();
-  actionResult.textContent = allWindowsView
-    ? '正在快速成组（全部窗口）…'
-    : '正在快速成组（当前窗口）…';
+  actionResult.textContent = allWindowsView ? t('groupingAll') : t('groupingCurrent');
 
   let lastBeat = Date.now();
   const onProgress = (message) => {
@@ -802,10 +855,10 @@ async function onGroupNow() {
     updateGroupProgress(done, total, phase);
     if (phase === 'quick') {
       actionResult.textContent =
-        total > 0 ? `已快速成组，正在精炼全部未缓存页（0/${total}）…` : '已快速成组。';
+        total > 0 ? t('quickRefineAll', { total }) : t('quickDone');
       void refreshTaskView();
     } else if (total > 0) {
-      actionResult.textContent = `已处理 ${done}/${total}…`;
+      actionResult.textContent = t('processedEllipsis', { done, total });
     }
   };
   chrome.runtime.onMessage.addListener(onProgress);
@@ -814,7 +867,7 @@ async function onGroupNow() {
   const stall = setInterval(() => {
     if (Date.now() - lastBeat <= REFINE_STALL_MS) return;
     aborted = true;
-    actionResult.textContent = '精炼进度中断，请重试。按钮已恢复。';
+    actionResult.textContent = t('refineStalled');
     chrome.runtime.onMessage.removeListener(onProgress);
     clearInterval(stall);
     btnGroupNow.disabled = false;
@@ -829,19 +882,25 @@ async function onGroupNow() {
     });
     if (aborted) return;
     if (!res?.ok) {
-      actionResult.textContent = `整理失败：${res?.error || '未知错误'}`;
+      actionResult.textContent = t('groupFail', { error: res?.error || t('unknownError') });
       return;
     }
     const src = res.sources
       ? Object.entries(res.sources)
-          .map(([k, v]) => `${sourceZh(k)}×${v}`)
-          .join('，')
+          .map(([k, v]) => `${sourceLabel(k)}×${v}`)
+          .join(document.documentElement.lang === 'en' ? ', ' : '，')
       : '';
     const refined = res.refined || 0;
-    summary = `已整理 ${res.grouped || 0} 个标签 / ${(res.clusters || []).length} 个任务`;
-    if (refined) summary += `；精炼 ${refined}/${refined}`;
-    if ((res.labels || []).length) summary += `（${res.labels.join('、')}）`;
-    if (src) summary += `；主题来源：${src}`;
+    let summary = t('groupSummary', {
+      grouped: res.grouped || 0,
+      tasks: (res.clusters || []).length,
+    });
+    if (refined) summary += t('groupRefined', { refined });
+    if ((res.labels || []).length) {
+      const joiner = document.documentElement.lang === 'en' ? ', ' : '、';
+      summary += t('groupLabels', { labels: res.labels.join(joiner) });
+    }
+    if (src) summary += t('groupSources', { src });
     actionResult.textContent = summary;
     if (refined > 0) updateGroupProgress(refined, refined, 'done');
     groupedOk = true;
@@ -863,6 +922,6 @@ async function onGroupNow() {
   }
 }
 
-function sourceZh(s) {
-  return { nano: 'Nano', custom: '自定义', heuristic: '启发式' }[s] || s;
+function sourceLabel(s) {
+  return { nano: t('sourceNano'), custom: t('sourceCustom'), heuristic: t('sourceHeuristic') }[s] || s;
 }
