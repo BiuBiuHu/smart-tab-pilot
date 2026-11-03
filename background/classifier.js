@@ -1,8 +1,16 @@
 /**
  * Topic classification: Chrome Prompt API (Gemini Nano) → custom OpenAI-compatible → heuristic.
+ * Labels are body/title semantics only — never domain/hostname aggregation.
  */
 import { CLASSIFY_SYSTEM_PROMPT, MAX_BODY_CHARS } from '../shared/constants.js';
+import {
+  heuristicLabel,
+  rejectDomainishLabel,
+  sanitizeLabel,
+} from '../shared/label-utils.js';
 import { getSettings } from '../shared/storage.js';
+
+export { heuristicLabel, rejectDomainishLabel, sanitizeLabel } from '../shared/label-utils.js';
 
 /** Options shared by availability() and create() so status matches create. */
 export const NANO_CREATE_OPTIONS = {
@@ -90,7 +98,7 @@ async function tryNanoClassify(snippet) {
     try {
       const prompt = `${CLASSIFY_SYSTEM_PROMPT}\n\n---\n${snippet}`;
       const raw = await session.prompt(prompt);
-      return (raw || '').trim() || null;
+      return rejectDomainishLabel((raw || '').trim()) || null;
     } finally {
       session.destroy?.();
     }
@@ -125,7 +133,11 @@ async function tryCustomClassify(snippet) {
         max_tokens: 32,
         messages: [
           { role: 'system', content: CLASSIFY_SYSTEM_PROMPT },
-          { role: 'user', content: snippet },
+          {
+            role: 'user',
+            content:
+              'Classify by page topic only (not site/domain).\n\n' + snippet,
+          },
         ],
       }),
     });
@@ -135,63 +147,12 @@ async function tryCustomClassify(snippet) {
     }
     const data = await res.json();
     const content = data?.choices?.[0]?.message?.content;
-    return typeof content === 'string' ? content.trim() : null;
+    const raw = typeof content === 'string' ? content.trim() : null;
+    return rejectDomainishLabel(raw) || null;
   } catch (err) {
     console.warn('[SmartTabPilot] custom classify failed', err);
     return null;
   }
 }
 
-/**
- * Keyword / heuristic fallback from title + snippet only.
- * @param {string} title
- * @param {string} text
- * @param {string} [url]
- */
-function heuristicLabel(title, text, url) {
-  const blob = `${title} ${text}`.toLowerCase();
 
-  /** @type {[RegExp, string][]} */
-  const rules = [
-    [/github|gitlab|bitbucket|pull request|commit/, '开发 / Code'],
-    [/stackoverflow|stack overflow|文档|documentation|api reference/, '文档 / Docs'],
-    [/youtube|bilibili|netflix|视频|video/, '视频 / Video'],
-    [/twitter|x\.com|微博|reddit|论坛/, '社交 / Social'],
-    [/gmail|outlook|mail\.|邮件/, '邮件 / Mail'],
-    [/购物|amazon|淘宝|京东|shop|cart|订单/, '购物 / Shopping'],
-    [/新闻|news|bbc|cnn|reuters|澎湃/, '新闻 / News'],
-    [/map|地图|google maps|高德|导航/, '地图 / Maps'],
-    [/wiki|百科|wikipedia/, '百科 / Wiki'],
-    [/chatgpt|claude|gemini|llm|ai\b/, 'AI 工具'],
-    [/figma|sketch|design|设计/, '设计 / Design'],
-    [/notion|confluence|jira|linear|项目管理/, '协作 / Work'],
-  ];
-
-  for (const [re, label] of rules) {
-    if (re.test(blob) || (url && re.test(url.toLowerCase()))) return label;
-  }
-
-  // First meaningful title tokens
-  const cleaned = (title || '')
-    .replace(/[\|\-–—·•].*$/, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-  if (cleaned.length >= 2 && cleaned.length <= 24) return cleaned;
-  if (cleaned.length > 24) return cleaned.slice(0, 20).trim();
-
-  try {
-    if (url) return new URL(url).hostname.replace(/^www\./, '');
-  } catch {
-    /* ignore */
-  }
-  return '未分类';
-}
-
-/** @param {string} label */
-function sanitizeLabel(label) {
-  return (label || '未分类')
-    .replace(/^["'`]+|["'`]+$/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 32) || '未分类';
-}

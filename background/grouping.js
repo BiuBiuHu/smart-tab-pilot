@@ -1,7 +1,7 @@
 /**
  * Semantic tab grouping by page-body topic labels → chrome.tabGroups.
  */
-import { GROUP_COLORS, MAX_BODY_CHARS } from '../shared/constants.js';
+import { GROUP_COLORS, MAX_BODY_CHARS, MSG } from '../shared/constants.js';
 import { getSettings } from '../shared/storage.js';
 import { shouldSkipUrl } from '../shared/url-utils.js';
 import { classifyPage } from './classifier.js';
@@ -16,7 +16,7 @@ const labelColorIndex = new Map();
  */
 export async function extractPageContent(tabId) {
   try {
-    const res = await chrome.tabs.sendMessage(tabId, { type: 'EXTRACT_PAGE' });
+    const res = await chrome.tabs.sendMessage(tabId, { type: MSG.EXTRACT_PAGE });
     if (res?.ok) {
       return {
         title: res.title || '',
@@ -108,6 +108,7 @@ function extractInPage(maxChars) {
 
 /**
  * Find or create a tab group in the window whose title matches label.
+ * Groups merge ONLY by semantic label (case-insensitive). Never by domain/hostname.
  * @param {number} windowId
  * @param {string} label
  * @param {number[]} tabIds
@@ -186,8 +187,10 @@ export function scheduleAutoGroup(tabId) {
       try {
         const tab = await chrome.tabs.get(tabId);
         if (!tab || tab.status !== 'complete') return;
+        if (shouldSkipUrl(tab.url)) return;
         await groupSingleTab(tab);
       } catch (err) {
+        // Tab may have been closed by dedupe — expected.
         console.warn('[SmartTabPilot] auto-group error', err);
       }
     }, 800),
