@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Smart Tab Pilot — Privacy Policy</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #0f172a;
+      --card: #1e293b;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --line: #334155;
+      --accent: #14b8a6;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f8fafc;
+        --card: #ffffff;
+        --text: #0f172a;
+        --muted: #475569;
+        --line: #e2e8f0;
+        --accent: #0f766e;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font: 16px/1.6 system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    main {
+      max-width: 44rem;
+      margin: 0 auto;
+      padding: 2.5rem 1.25rem 4rem;
+    }
+    h1 { font-size: 1.75rem; line-height: 1.25; margin: 0 0 0.5rem; }
+    h2 { font-size: 1.15rem; margin: 2rem 0 0.6rem; }
+    p, li { color: var(--text); }
+    .meta, .zh { color: var(--muted); font-size: 0.95rem; }
+    .zh { margin: 0 0 1.5rem; }
+    a { color: var(--accent); }
+    ul { padding-left: 1.2rem; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 1rem 1.1rem;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Smart Tab Pilot Privacy Policy</h1>
+    <p class="meta">Last updated: 2026-11-03 · Chrome Manifest V3 extension</p>
+    <p class="zh">中文摘要：本扩展没有自有云账号或运营后台。默认不上传页面正文。只有你在设置里填写了自定义模型 Base URL 时，才会向<strong>该地址</strong>发送短摘要；作者收不到副本。源码中没有统计或遥测。</p>
+
+    <h2>Who we are</h2>
+    <p>Smart Tab Pilot is an open-source browser extension (MIT). There is <strong>no first-party cloud account</strong> and <strong>no operator backend</strong> shipped with the extension.</p>
+
+    <h2>What the extension stores on your device</h2>
+    <p>Using Chrome storage APIs only:</p>
+    <ul>
+      <li>Settings you choose (dedupe, hash matching, auto-group, quick search, window scope, UI language).</li>
+      <li>Optional custom model fields: Base URL, API key, model name (<code>chrome.storage.sync</code>).</li>
+      <li>Short tab summaries: title, path/slug, 1–2 sentences — <strong>never the full page body</strong>.</li>
+      <li>Navigation-graph priors (URL patterns, not full page text).</li>
+      <li>In-session merge/split edges and a recently closed list for optional search.</li>
+    </ul>
+    <p>Uninstalling the extension removes this data from the profile (subject to Chrome’s own storage rules).</p>
+
+    <h2>What is read from pages</h2>
+    <p>A content script may read a compact text snapshot from <code>http(s)</code> pages so tasks can be named by <strong>topic</strong>, not by website brand. The in-memory extract is capped and then reduced to a short summary before anything is saved.</p>
+    <p>Restricted pages (<code>chrome://</code>, <code>chrome-extension://</code>, <code>about:</code>, etc.) are skipped.</p>
+
+    <h2>Network: what leaves the device</h2>
+    <div class="card">
+      <p><strong>Default / no custom model</strong></p>
+      <ul>
+        <li>If Chrome Prompt API (<code>LanguageModel</code> / Gemini Nano) is available, short snippets are sent to the <strong>on-device</strong> model. That path does not use a developer-operated server.</li>
+        <li>If Nano is missing and you have not configured a custom model, grouping uses local heuristics only. <strong>No page text is uploaded.</strong></li>
+      </ul>
+      <p><strong>Custom model (only if you configure it)</strong></p>
+      <ul>
+        <li>You may enter an OpenAI-compatible Base URL, API key, and model name.</li>
+        <li>The extension then POSTs short classify / same-group prompts to <strong>that URL</strong> (typically <code>{base}/chat/completions</code>) with your key.</li>
+        <li>The destination is entirely <strong>user-provided</strong>. The authors do not receive a copy.</li>
+        <li>Do not point this at an untrusted host; treat the key as a secret.</li>
+      </ul>
+      <p><strong>Not sent</strong></p>
+      <ul>
+        <li>No analytics, advertising IDs, crash telemetry, or usage beacons appear in the source.</li>
+        <li>No automatic call to a hardcoded Smart Tab Pilot API.</li>
+      </ul>
+    </div>
+
+    <h2>Third parties</h2>
+    <ul>
+      <li>Google Chrome (tab/group/side-panel APIs; optional on-device Nano).</li>
+      <li>Only if you opt in: the operator of the URL you type as Base URL.</li>
+    </ul>
+
+    <h2>Children</h2>
+    <p>The extension is a productivity tool for browser tabs. It is not directed at children and does not knowingly collect children’s personal information.</p>
+
+    <h2>Changes</h2>
+    <p>If data practices change (for example a future first-party endpoint), this policy and the store listing must be updated before that version is published.</p>
+
+    <h2>Contact</h2>
+    <p>Use the <a href="https://github.com/BiuBiuHu/smart-tab-pilot/issues">GitHub repository issues</a> for the project that hosts this extension.</p>
+  </main>
+</body>
+</html>

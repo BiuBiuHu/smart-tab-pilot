@@ -18,6 +18,8 @@ npm run pack
 node scripts/pack-extension.mjs
 ```
 
+打包器顺序：系统 `zip` → `python3` + `zipfile` → **纯 Node**（无 `zip` CLI 也能过 `npm test` / `npm run pack`）。
+
 产物（**不要提交 zip**，本地/CI 生成即可）：
 
 ```text
@@ -50,13 +52,17 @@ zip 根目录就是扩展根（含 `manifest.json`），可直接「加载已解
 | 英文商店文案 | [listing-en.md](./listing-en.md) |
 | 中文商店文案 | [listing-zh.md](./listing-zh.md) |
 | 权限理由（对照 manifest） | [permissions.md](./permissions.md) |
-| 隐私政策草稿（须自行托管公开 URL） | [privacy.md](./privacy.md) |
+| 隐私政策草稿（须自行托管公开 URL） | [privacy.md](./privacy.md) / [privacy.html](./privacy.html) |
 
 ## 提交前检查（维护者，非终端用户）
 
 1. `npm test` 全绿。
 2. `npm run pack`，用 `unzip -l artifacts/smart-tab-pilot-*.zip` 确认无 tests/docs/.git。
 3. 准备 **128×128** 图标（仓库 `icons/icon128.png`）以及商店截图（1280×800 或 640×400，至少 1 张）。本仓库不代为截侧栏实机图。
-4. 把 [privacy.md](./privacy.md) 发布到可公开访问的 HTTPS 地址（GitHub Pages / 站点），把该 URL 填进商店「隐私权政策」。
+4. 隐私政策公开 URL（填进商店「隐私权政策」）：
+
+   `https://biubiuhu.github.io/smart-tab-pilot/chrome-web-store/privacy.html`
+
+   源文件：`docs/chrome-web-store/privacy.html`（与 [privacy.md](./privacy.md) 同文）。GitHub Pages 从仓库 `docs/` 发布（workflow：`.github/workflows/pages.yml`）。若 Pages 尚未开通：仓库 Settings → Pages → Deploy from a branch → `main` / `/docs`，或把 source 设为 GitHub Actions 后重跑该 workflow。
 5. 类别建议：**Productivity**（效率工具）。
 6. 单用途说明：整理标签（精确去重 + 任务导航图），不是通用网页改写器。

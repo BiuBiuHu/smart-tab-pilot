@@ -1,6 +1,10 @@
 # Privacy policy (draft)
 
-Publish this text (or a hosted equivalent) at a **public HTTPS URL** and paste that URL into the Chrome Web Store listing. The store requires a privacy policy because the extension can read tab URLs/titles and optional page excerpts, and may call a user-configured model endpoint.
+Hosted HTML (paste this into the Chrome Web Store “Privacy policy” field):
+
+**https://biubiuhu.github.io/smart-tab-pilot/chrome-web-store/privacy.html**
+
+The store requires a privacy policy because the extension can read tab URLs/titles and optional page excerpts, and may call a user-configured model endpoint. Source: `docs/chrome-web-store/privacy.html` (same text as below).
 
 Last updated: 2026-11-03  
 Product: Smart Tab Pilot (Chrome Manifest V3 extension)

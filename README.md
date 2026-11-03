@@ -173,9 +173,13 @@ npm test
 npm run pack
 ```
 
-产物：`artifacts/smart-tab-pilot-<manifest.version>.zip`（当前为 `artifacts/smart-tab-pilot-1.5.0.zip`）。只含 MV3 运行时：`manifest.json`、`background/`、`sidepanel/`、`shared/`、`content/`、`icons/`、`_locales/`、`LICENSE`。不含 `tests/`、`docs/`、`.git/`、`node_modules/`、`popup/`。
+产物：`artifacts/smart-tab-pilot-<manifest.version>.zip`（当前为 `artifacts/smart-tab-pilot-1.5.0.zip`）。只含 MV3 运行时：`manifest.json`、`background/`、`sidepanel/`、`shared/`、`content/`、`icons/`、`_locales/`、`LICENSE`。不含 `tests/`、`docs/`、`.git/`、`node_modules/`、`popup/`。无系统 `zip` 时回退到 Python 或纯 Node。
 
-商店文案、权限理由与隐私政策草稿见 `docs/chrome-web-store/`。本仓库不代为登录开发者后台。
+商店文案、权限理由与隐私政策见 `docs/chrome-web-store/`。公开隐私页：
+
+https://biubiuhu.github.io/smart-tab-pilot/chrome-web-store/privacy.html
+
+本仓库不代为登录开发者后台。
 
 ## 开发自检
 
