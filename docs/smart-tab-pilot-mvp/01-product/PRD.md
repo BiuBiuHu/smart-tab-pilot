@@ -5,6 +5,7 @@
 | 版本 | 日期 | 变更内容 | 变更原因 | 影响 |
 |------|------|----------|----------|------|
 | v0.1 | 2026-11-03 | 完整 MVP PRD | 目标澄清已冻结；需求验证判定可进 PRD | 进入 awaiting-user-review；约束后续实现与验收 |
+| v0.2 | 2026-11-03 | 硬约束：同域不同主题必须分不同组；搜索默认关闭 | 用户编码批准 + 产品纠偏 | 分类/启发式禁止域名聚合 |
 
 ## 1. 当前决策
 
@@ -18,7 +19,7 @@
   - Vendor 整套 `alibaba/page-agent` Agent 栈。
   - 将快速搜索作为 MVP 验收项（虽代码已存在）。
 - 当前范围边界：单机 Chrome MV3 扩展；无自有后端；可选用户配置的出站 OpenAI 兼容 API。
-- **门禁状态：`awaiting-user-review`**（用户审核通过前禁止改产品代码）
+- **门禁状态：`approved-for-implementation`**（用户已批准编码；实现中）
 
 ## 2. 需求验证结论
 
@@ -69,12 +70,13 @@
 
 1. 同窗口精确 URL 去重跳转（默认匹配含 hash；设置可忽略 hash）。
 2. 跳过 `chrome://`、`chrome-extension://`、`about:`、`edge://`、`devtools://`、`view-source:` 等。
-3. Content Script + 注入回退的紧凑文本抽取（标题、语义主区域、h1–h3、可见正文，去噪，≤~4000 字符）。
-4. 自动语义分组（load complete + debounce）与「立即分组当前窗口」。
-5. 分类写入/合并 `chrome.tabGroups`（标题、颜色循环）。
-6. 模型阶梯与弹窗状态：Nano availability、downloadable 用户手势下载、OpenAI 兼容字段、启发式回退提示。
-7. 设置持久化：`chrome.storage.sync`。
-8. README Load unpacked 说明；MIT 许可。
+3. **分组硬约束**：标签组标题来自页面正文/标题语义；**禁止按域名/站点聚合**。同一域名下不同主题的标签必须进入不同组。
+4. Content Script + 注入回退的紧凑文本抽取（标题、语义主区域、h1–h3、可见正文，去噪，≤~4000 字符）。
+5. 自动语义分组（load complete + debounce）与「立即分组当前窗口」。
+6. 分类写入/合并 `chrome.tabGroups`（标题、颜色循环；合并键仅为语义标签）。
+7. 模型阶梯与弹窗状态：Nano availability、downloadable 用户手势下载、OpenAI 兼容字段、启发式回退提示。
+8. 设置持久化：`chrome.storage.sync`（含 `quickSearchEnabled` 默认 false）。
+9. README Load unpacked 说明；MIT 许可。
 
 ### 5.2 Out of Scope（本版本不验收）
 
@@ -139,7 +141,7 @@
 | 需求 ID | 验收标准 | 证据类型 | 优先级 |
 |---------|----------|----------|--------|
 | REQ-001 | 同窗口重复打开相同 URL（默认含 hash 一致）时，激活已有标签并关闭新标签；开启 ignoreHash 后仅 hash 不同也去重 | 手工 Chrome 步骤 + 录屏/截图 | P0 |
-| REQ-002 | 自动或「立即分组」后，标签进入以主题命名的 tabGroup；主题应来自正文/标题信号而非单纯 hostname | 截图 + 可选分类 source 统计 | P0 |
+| REQ-002 | 自动或「立即分组」后，标签进入以主题命名的 tabGroup；主题来自正文/标题；**同域不同主题必须分到不同组**（禁止域名聚合） | 截图 + 可选分类 source 统计 | P0 |
 | REQ-003 | 弹窗展示 Nano 状态；downloadable 可点下载；无 Nano 时配置自定义模型后分组 source 可为 custom，否则 heuristic 且有提示 | 截图 | P0 |
 | REQ-004 | 抽取为纯文本快照，长度受上限约束；灵感来源声明不引入 page-agent 依赖 | 代码审查 + 样例页日志 | P0 |
 | REQ-005 | 去重/自动分组开关、ignoreHash、自定义模型保存、立即分组结果文案可用 | 截图 | P0 |
@@ -168,5 +170,5 @@
 
 ## 10. 门禁
 
-- **status: `awaiting-user-review`**
-- 审核通过语义示例：「审核通过」「开始编码」「开始实施」
+- **status: `approved-for-implementation`**
+- 用户已批准编码；硬约束补充：同域不同主题分不同组

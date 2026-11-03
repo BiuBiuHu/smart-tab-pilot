@@ -5,6 +5,7 @@
 | 版本 | 日期 | 变更内容 | 变更原因 | 影响 |
 |------|------|----------|----------|------|
 | v0.1 | 2026-11-03 | MV3 扩展架构、模型阶梯、抽取边界 | 对齐现有 scaffold 与 MVP PRD | awaiting-user-review |
+| v0.2 | 2026-11-03 | 禁止域名聚合；label-utils；搜索默认关 | 编码批准 + 产品硬约束 | classifier/heuristic/docs |
 
 ## 1. 当前决策
 
@@ -15,6 +16,7 @@
   - 分组：`background/grouping.js` + `content/extract.js` + `background/classifier.js`。
   - 设置：`shared/storage.js` → `chrome.storage.sync`。
   - 模型阶梯：`LanguageModel`（Nano）→ 用户 OpenAI 兼容 `fetch` → 启发式。
+  - **分组键仅为语义 label**：`placeTabsInGroup` 按标签名合并；分类 prompt + `rejectDomainishLabel` 禁止站点/域名作为组名；同域不同主题必须不同组。
   - 抽取：自研文本 DOM 快照；灵感自 page-agent，**不引入其 npm/源码依赖**。
 - 当前自研边界：去重、抽取、分类编排、tabGroups 写入、弹窗；不自研通用 Agent 框架。
 - 当前实施边界：manual-gated；本轮只交付文档。现有代码为 scaffold，审核后再按 backlog 收敛/补齐。
@@ -131,6 +133,7 @@ sequenceDiagram
 | `exactDedupeEnabled` | boolean | true | 去重总开关 |
 | `ignoreHash` | boolean | false | true 时规范化去掉 hash |
 | `autoSemanticGroupEnabled` | boolean | true | 自动分组 |
+| `quickSearchEnabled` | boolean | false | P1 搜索 UI；MVP 默认关 |
 | `customBaseUrl` | string | '' | OpenAI 兼容 Base |
 | `customApiKey` | string | '' | Bearer Key |
 | `customModel` | string | gpt-4o-mini | 模型名 |
@@ -177,9 +180,10 @@ sequenceDiagram
 1. **禁止**把 page-agent / 其它 Agent 框架整包拷入仓库。
 2. **禁止** popup 直连自定义模型或复制一份分类逻辑。
 3. **去重与分组解耦**：去重成功关闭的标签不得继续分组；去重逻辑不得依赖 LLM。
-4. **产品范围**：不得在未改 PRD 的情况下把 P1 搜索写成 MVP 必达。
-5. **密钥**：自定义 Key 仅存 storage；文档须提示勿用高权限生产密钥；不得提交真实 Key。
-6. 抽取输出必须是**纯文本快照**，禁止默认截图/多模态。
+4. **禁止域名聚合**：不得用 hostname/站点品牌作为 tabGroup 标题或合并键；同域多主题必须分多组。
+5. **产品范围**：不得在未改 PRD 的情况下把 P1 搜索写成 MVP 必达。
+6. **密钥**：自定义 Key 仅存 storage；文档须提示勿用高权限生产密钥；不得提交真实 Key。
+7. 抽取输出必须是**纯文本快照**，禁止默认截图/多模态。
 
 ## 9. 失败处理、重试与回滚
 

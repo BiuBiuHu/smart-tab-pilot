@@ -10,7 +10,8 @@
 
 - 当前优先级策略：**P0 去重验收与稳定性 > P0 语义分组与模型阶梯 > 文档/权限收敛 > P1 搜索**
 - 当前阶段重点：文档审核；**不编码**
-- Scaffold 声明：搜索相关代码 = **ahead-of-scope（已实现但非本版本承诺）**
+- Scaffold 声明：搜索相关代码 = **ahead-of-scope（已实现但非本版本承诺；默认 `quickSearchEnabled=false`）**
+- **硬约束**：同域不同主题必须分不同组；禁止域名聚合
 
 ## 2. 任务分组
 
@@ -30,10 +31,10 @@
 |----|------|----------|--------|------|----------|
 | TASK-001 | 完成竞品/开源调研文档 | docs/00-research | P0 | done（本轮） | 文件可审 |
 | TASK-002 | 完成需求验证+PRD+UI+架构+工程+测试+ops | docs/* | P0 | done（本轮） | awaiting-user-review |
-| TASK-003 | 用户审核文档包 | — | P0 | pending | 用户明确批准 |
-| TASK-004 | P0 去重用例手工跑通并记录证据 | dedupe / QA | P0 | blocked（待批准） | TC-DEDUP 全过 |
-| TASK-005 | 语义分组 + Nano/自定义/启发式抽检 | grouping/classifier | P0 | blocked | REQ-002/003 |
-| TASK-006 | 抽取样例页（文章/文档/SPA）回归 | extract.js | P0 | blocked | 纯文本≤4k |
+| TASK-003 | 用户审核文档包 | — | P0 | done | 用户明确批准编码 |
+| TASK-004 | P0 去重用例手工跑通并记录证据 | dedupe / QA | P0 | in-progress | TC-DEDUP 全过 + npm test |
+| TASK-005 | 语义分组 + Nano/自定义/启发式抽检 | grouping/classifier | P0 | in-progress | REQ-002/003 + 同域分主题 |
+| TASK-006 | 抽取样例页（文章/文档/SPA）回归 | extract.js | P0 | in-progress | 纯文本≤4k |
 | TASK-007 | （可选）收敛搜索 UI/文案/sessions | popup/manifest/README | P1 | pending | 与 PRD 一致 |
 | TASK-008 | 搜索产品化验收 | search/recent-closed | P1 | deferred | 新 PRD 修订 |
 | TASK-009 | 商店上架准备 | ops | P2 | deferred | listing+隐私 |
