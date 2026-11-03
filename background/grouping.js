@@ -27,7 +27,7 @@ import { listUncachedEligibleTabs } from '../shared/refine-queue.js';
 import { buildTaskClusters } from '../shared/task-graph.js';
 import { shouldSkipUrl } from '../shared/url-utils.js';
 import { classifyPage, tryModelSameGroupJudge } from './classifier.js';
-import { loadPriors, loadSessionFeedback } from './nav-memory.js';
+import { loadPriors, loadSessionFeedback, recordModelMerges } from './nav-memory.js';
 import { attachLineage, hydrateLineage, patchLineage } from './tab-lineage.js';
 import {
   getTabSummary,
@@ -344,14 +344,16 @@ async function maybeApplyModelJudge(clusters, nodes, buildOpts) {
   try {
     const summariesByTab = new Map(nodes.map((n) => [n.id, n.summary]));
     const payload = buildJudgePayload(clusters, summariesByTab);
-    const hasExcerpt = payload.clusters.some((c) => c.summaries.some((s) => s.excerpt || s.slugs?.length));
-    if (!hasExcerpt) return clusters;
+    if (!payload.candidates.length) return clusters;
+    const wanted = new Set(payload.candidates.flatMap((p) => [p.a, p.b]));
+    payload.clusters = payload.clusters.filter((c) => wanted.has(c.id));
     const judgment = await withTimeout(
       tryModelSameGroupJudge(payload),
       MODEL_JUDGE_TIMEOUT_MS,
       null,
     );
     if (!judgment?.merges?.length) return clusters;
+    await recordModelMerges(judgment.merges);
     return applyModelJudgment(nodes, clusters, judgment, buildOpts, buildTaskClusters);
   } catch (err) {
     console.warn('[SmartTabPilot] model same-group judge skipped', err);
@@ -389,7 +391,7 @@ export async function groupSingleTab(tab) {
 
   const all = await chrome.tabs.query({});
   const nodes = await nodesFromTabs(all, { onlyTabId: tab.id });
-  const clusters = await clusterNodes(nodes);
+  const clusters = await clusterNodes(nodes, { useModelJudge: true });
   const mine = clusters.find((c) => c.tabIds.includes(tab.id));
   if (!mine) return { ok: false, reason: 'no-cluster' };
 
@@ -620,7 +622,7 @@ export async function getTaskView(opts = {}) {
 
   const eligible = allTabs.filter((t) => t.id != null && !shouldSkipUrl(t.url));
   const nodes = await nodesFromTabs(eligible, { fullExtract: false });
-  const clusters = await clusterNodes(nodes);
+  const clusters = await clusterNodes(nodes, { useModelJudge: true });
   const nodeById = new Map(nodes.map((n) => [n.id, n]));
   const tabById = new Map(allTabs.map((t) => [t.id, t]));
 

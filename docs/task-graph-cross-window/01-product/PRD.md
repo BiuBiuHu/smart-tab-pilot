@@ -6,14 +6,16 @@
 |------|------|----------|----------|------|
 | v0.1 | 2026-11-03 | 任务维度关联 + 跨窗口视图；命名「任务导航图 / navigation graph learning」 | 用户（生湖岳）批准两功能同做，并要求可学习来源边 | 叠在 MVP（PR #1）之上 |
 | v0.2 | 2026-11-03 | 项目亲和强于冲突页标题；语义只命名不强制拆项目；短摘要落盘；同窗同名物理组合一 | Bettr 过碎 + 同窗两个「LinkE」/「BIGP一期 迭代」 | 任务图 project 边 + tabSummary + physical coalesce |
+| v0.3 | 2026-11-03 | slug 只提候选；最终同项目合并由模型根据短摘要决定。**跨窗口不是拆组原因** | 多个「Bettr Promotion Unio / Marketing」逻辑簇 | 去掉 regex 硬并 |
 
 ## 1. 当前决策
 
-- **任务簇 ≠ 内容聚类**：先用来源（`openerTabId` / referrer）、**项目亲和**与开页时间建图，语义只负责精炼与命名。
+- **任务簇 ≠ 内容聚类**：先用来源（`openerTabId` / referrer）与开页时间建图；slug/产品键只当**候选特征**；**最终是否同一项目由模型根据短摘要判断**（无模型则 opener/时间/用户反馈，不用 regex 硬并）。
 - **可学习**：标签存活时记住谁打开了谁；关闭后把 origin+path 模式对写成弱 prior，同类导航会加强关联。
 - **跨窗口**：侧栏默认「全部窗口」；`chrome.tabGroups` 仍按 `windowId` 物理写入；逻辑任务可跨窗展示（窗口徽章）。
 - **P0 去重升级**：精确 URL 去重改为跨窗口跳转（聚焦已有标签所在窗口+标签，关闭新标签）。
-- **硬约束不变**：禁止按裸域名聚合；同域不同**产品**仍可拆；同项目（产品 slug / 本地同源端口 / origin+两段 path）即使页标题冲突也保持一簇，除非用户拆分。
+- **硬约束不变**：禁止按裸域名聚合；同域不同**产品**仍可拆。
+- **跨窗口不是拆组原因**：逻辑簇本就可跨窗。侧栏里多个「Bettr Promotion *」是产品键/环境后缀把簇拆开了，不是因为不同窗口。
 - **UI**：仅 Chrome side panel；开源 MIT；无密钥入库。
 - **门禁状态：`approved-for-implementation`**（用户已批准编码）
 
@@ -30,10 +32,11 @@
 
 1. **任务导航图（navigation graph learning）**
    - 强边：活着的 `openerTabId` 标签树；可选 `document.referrer` 命中另一个打开中的 URL。
-   - 强-中边：**项目亲和**（host/path 产品 slug 如 `bettr-promotion` / `bettr`；loopback 同端口；origin+前两段有意义 path）。强于冲突页标题，弱于用户拆分。**不是**裸 hostname。
+   - **产品键（候选，非权威）**：canonical key 如 `bettr-promotion`（去掉 Unio/Marketing/dev 等环境后缀）。只用来提候选给模型，**禁止** regex 硬并。
    - 中边：同一窗口、创建时间差 ≤ `TIME_ADJACENCY_MS`（默认 45s）。
    - 弱边：关闭后持久化的 URL 模式对 prior；达到阈值后可并入未来相似导航。
-   - 语义：只做弱精炼（拆开「仅弱边连上且主题冲突」的簇）和任务命名；**不得**因标题不同拆开已有项目亲和的标签。
+   - **模型同组（权威，第二层）**：Nano/自定义根据短摘要决定是否同一任务；组名「Bettr Promotion」，不把环境写进簇 id。
+   - 语义：只做弱精炼与命名。
 2. **用户反馈扩展点**：侧栏「与上一任务合并 / 拆成独立任务」调整边权 + 会话覆盖；完整在线学习可后续加厚。
 3. **跨窗口逻辑聚合**：`chrome.tabs.query({})`；侧栏「全部窗口」（默认）/「仅当前窗口」；窗口徽章；物理组不跨窗 `move`。
 4. **跨窗口精确 URL 去重**（P0 不回退）。
@@ -71,7 +74,8 @@ content idle
 |----|------|----------|------------|
 | opener / 会话合并 | 强 | 始终 | **仍合并**（任务连贯） |
 | referrer 命中打开中 URL | 强-中 | 始终 | 仍合并 |
-| 项目亲和（slug / 本地同端口 / origin+两段 path） | 强-中 | 始终（非裸域名） | **仍合并**（语义只命名，如「Bettr Promotion」） |
+| 产品 slug / 环境后缀 | 候选 | **不硬并** | 只提示模型 |
+| 模型同组（短摘要） | 第二层 | Nano/自定义可用 | 摘要判定同一项目则合并 |
 | 时间相邻（同窗） | 中 | 主题兼容 | **不合并** |
 | 学习 prior ≥ 阈值 | 弱 | 主题兼容 | **不合并** |
 | 仅语义相同 | — | **不作为并键** | — |
@@ -79,8 +83,9 @@ content idle
 
 ### 4.3 跨窗口
 
+- **跨窗口不是拆组原因。** 逻辑簇本来就可以跨窗；侧栏多个「Bettr Promotion Unio / Marketing」是候选键/环境名把簇拆开，不是 windowId。
 - 逻辑簇：lineage 可跨窗（拖走标签仍记得 opener）。
-- 物理：每个 `windowId` 各自 `tabs.group`；同名组可以在两个窗口各有一份。
+- 物理：每个 `windowId` 各自 `tabs.group`，标题仍复用「Bettr Promotion」；不跨窗 `move`。
 - 侧栏：按任务列标签，每条带窗口徽章；点条目标记激活并 `windows.update(focused)`。
 
 ## 5. 验收标准
@@ -90,8 +95,8 @@ content idle
 | REQ-001' | 窗口1 已有 URL A，窗口2 再开 A → 聚焦窗口1 的旧标签并关闭新标签 | P0 |
 | REQ-T01 | 从页 A 点击打开 B、C（opener 链），即使主题不同，侧栏同一任务 | P0 |
 | REQ-T02 | 同域两个无关主题、无 opener、时间相隔很远 → 两个任务；组名不是域名 | P0 |
-| REQ-T05 | 同端口 localhost 多个 demo 页（标题各异）→ 一个任务 | P0 |
-| REQ-T06 | marmot `…/bettr/bettr-promotion` + 营销台 host + alipay `bettr-promotion-dev-unio`（可跨窗）→ 一个「Bettr Promotion」任务，不被「登录态异常」等标题拆开 | P0 |
+| REQ-T05 | 同端口 localhost 多个 demo：slug 只提候选；有模型且摘要判定同一应用 → 一个任务；无模型则靠 opener/时间/用户合并 | P0 |
+| REQ-T06 | Unio / Marmot / Marketing / ac.alipay.com 四类 URL → 同一 canonical key `bettr-promotion`；**regex 不硬并**；模型根据摘要并成一个「Bettr Promotion」（可跨窗） | P0 |
 | REQ-T07 | 同域不同产品（如 GitHub 两个仓库）仍拆开；精确 URL 去重行为不变 | P0 |
 | REQ-T08 | 只持久化短摘要，不把整页正文写入 storage；导航换 URL 则刷新摘要 | P0 |
 | REQ-P01 | 同一窗口不得出现两个规范化标题相同的 `tabGroup`（如两个「LinkE」） | P0 |

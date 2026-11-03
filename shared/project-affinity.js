@@ -1,6 +1,7 @@
 /**
- * Project affinity — stronger than conflicting page titles, weaker than
- * user split. Not bare-hostname grouping for unrelated public sites.
+ * Project affinity FEATURES (candidates only).
+ * Slug / path / loopback may propose pairs for the model judge.
+ * They are NOT a merge authority — do not union on these keys.
  */
 import { isIdLikeSegment } from './url-pattern.js';
 import { shouldSkipUrl } from './url-utils.js';
@@ -19,6 +20,12 @@ const PATH_STOP = new Set([
   'web', 'html', 'it', 'en', 'zh', 'cn', 'home', 'main', 'portal', 'dashboard',
   'issue', 'issues', 'pull', 'pulls', 'blob', 'tree', 'commit', 'commits',
   'ticket', 'tickets',
+]);
+
+/** Env / deploy tokens — never part of the canonical product key or cluster title. */
+export const ENV_SLUG_PARTS = new Set([
+  'dev', 'unio', 'marketing', 'console', 'staging', 'prod', 'test', 'preview',
+  'sit', 'uat', 'pre', 'demo', 'local', 'de', 'us', 'cn', 'it', 'en', 'zh',
 ]);
 
 /** Resource words that must not form origin+2-seg product keys (issue lists, etc.). */
@@ -74,7 +81,12 @@ export function slugsFromToken(token) {
   const slugs = [];
   if (parts.length >= 2) {
     slugs.push(`${parts[0]}-${parts[1]}`);
-    if (parts.length >= 3 && parts[2].length >= 4 && !PATH_STOP.has(parts[2])) {
+    if (
+      parts.length >= 3 &&
+      parts[2].length >= 4 &&
+      !PATH_STOP.has(parts[2]) &&
+      !ENV_SLUG_PARTS.has(parts[2])
+    ) {
       slugs.push(`${parts[0]}-${parts[1]}-${parts[2]}`);
     }
   }
@@ -95,6 +107,39 @@ export function slugsRelated(a, b) {
   if (a === b) return true;
   const [short, long] = a.length <= b.length ? [a, b] : [b, a];
   return long.startsWith(`${short}-`);
+}
+
+/**
+ * Strip env suffixes so `bettr-promotion-marketing` and `bettr-promotion-dev-unio`
+ * collapse to the product feature `bettr-promotion`. Not a merge decision.
+ * @param {string} slug
+ */
+export function canonicalizeSlug(slug) {
+  const parts = (slug || '')
+    .toLowerCase()
+    .split('-')
+    .filter(Boolean)
+    .filter((p) => !ENV_SLUG_PARTS.has(p) && !PATH_STOP.has(p) && !isOpaqueSuffix(p));
+  if (parts.length >= 2) return `${parts[0]}-${parts[1]}`;
+  if (parts.length === 1 && parts[0].length >= 4) return parts[0];
+  return '';
+}
+
+/**
+ * Canonical product features for a URL (e.g. bettr-promotion).
+ * Used as model hints / candidate grouping — never as cluster id.
+ * @param {string | undefined} url
+ * @returns {string[]}
+ */
+export function canonicalProductKeys(url) {
+  const keys = projectAffinityKeys(url);
+  const out = new Set();
+  for (const s of keys.slugs) {
+    const c = canonicalizeSlug(s);
+    if (c) out.add(c);
+  }
+  if (keys.loopbackKey) out.add(keys.loopbackKey);
+  return [...out];
 }
 
 /**
@@ -186,39 +231,34 @@ export function sharesProjectAffinity(urlA, urlB) {
 }
 
 /**
- * Human title for a shared project, e.g. Bettr Promotion.
+ * Human title from the canonical product key only.
+ * Never appends Unio / Marketing / env into the cluster name.
  * @param {{ url?: string, title?: string }[]} nodes
  */
 export function projectDisplayName(nodes) {
   const list = nodes || [];
   /** @type {Map<string, number>} */
-  const hyphenScores = new Map();
+  const scores = new Map();
   let loopback = '';
   for (const n of list) {
     const keys = projectAffinityKeys(n.url);
     if (keys.loopbackKey) loopback = keys.loopbackKey;
-    for (const s of keys.slugs) {
-      if (!s.includes('-')) continue;
-      hyphenScores.set(s, (hyphenScores.get(s) || 0) + 1);
+    for (const raw of canonicalProductKeys(n.url)) {
+      if (raw.startsWith('loopback:')) continue;
+      if (!raw.includes('-')) continue;
+      scores.set(raw, (scores.get(raw) || 0) + 1);
     }
   }
 
   let best = '';
   let bestScore = 0;
-  for (const [slug, n] of hyphenScores) {
-    const parts = slug.split('-').length;
-    const score = n * 10 + parts;
-    if (score > bestScore || (score === bestScore && slug.length > best.length)) {
+  for (const [slug, n] of scores) {
+    if (n > bestScore || (n === bestScore && slug.length > best.length)) {
       best = slug;
-      bestScore = score;
+      bestScore = n;
     }
   }
   if (best) return titleCaseSlug(best);
-
-  const titles = list.map((n) => n.title || '').join(' ');
-  if (/bettr/i.test(titles) || list.some((n) => /bettr/i.test(n.url || ''))) {
-    return 'Bettr';
-  }
   if (loopback) return '本地应用';
   return '';
 }

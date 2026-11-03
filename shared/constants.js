@@ -113,12 +113,15 @@ Rules:
  * Second-layer same-group judge. Input is short tab summaries only — never a full body.
  */
 export const SAME_GROUP_SYSTEM_PROMPT = `You judge whether browser tabs belong to the SAME project/task.
-You only receive short summaries (title, URL path/product slug, optional 1-2 sentences). Never assume a full page body.
+You only receive short summaries (title, path/product key, optional 1-2 sentences). Never assume a full page body.
+Product keys (e.g. bettr-promotion) and "candidate" pairs are HINTS only — not a merge order. Decide from the summaries.
 Reply with ONLY JSON: {"merges":[[tabId,tabId],...]}
 Rules:
-- Merge only when summaries clearly share one product/project (e.g. Bettr Promotion consoles/demos).
+- Merge when summaries describe one product/project even across hosts or windows (Marmot console, marketing console, Unio/alipay page, ac.alipay.com of the same Bettr Promotion).
+- Title should stay the product name (Bettr Promotion). Do not split Unio vs Marketing vs path variants.
+- Different windows are NOT a reason to split. Logical tasks already span windows.
 - Do NOT merge different products on the same site (two GitHub repos, two unrelated tools).
-- Do NOT merge just because hostnames match.
+- Do NOT merge just because hostnames or a slug hint match if summaries are clearly different products.
 - If unsure, return {"merges":[]}.
 - No markdown, no explanation.`;
 

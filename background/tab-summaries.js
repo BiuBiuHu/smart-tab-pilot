@@ -63,6 +63,9 @@ function normalize(raw) {
     url: typeof raw.url === 'string' ? raw.url : '',
     pathKey: typeof raw.pathKey === 'string' ? raw.pathKey : '',
     slugs: Array.isArray(raw.slugs) ? raw.slugs.filter((s) => typeof s === 'string') : [],
+    productKeys: Array.isArray(raw.productKeys)
+      ? raw.productKeys.filter((s) => typeof s === 'string')
+      : [],
     excerpt: typeof raw.excerpt === 'string' ? raw.excerpt : '',
     extractedAt: typeof raw.extractedAt === 'number' ? raw.extractedAt : 0,
   };

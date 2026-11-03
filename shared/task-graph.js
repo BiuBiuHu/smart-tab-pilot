@@ -4,19 +4,19 @@
  * Build task clusters from:
  *   1. Strong: live openerTabId (tab tree) — never split by topic
  *   2. Strong-medium: referrer / click-source match to another open tab
- *   3. Strong-medium: project affinity (product slug / loopback origin /
- *      origin+first two path segments) — NOT bare hostname; titles cannot split
- *   4. Medium: open-time adjacency (same window, configurable window)
- *   5. Weak learned: durable URL-pattern priors from past opener/time/feedback
- *   6. Weak semantic: refine only — sub-split mixed WEAK components;
- *      never the primary merge key; never hostname/domain.
+ *   3. Medium: open-time adjacency (same window, configurable window)
+ *   4. Weak learned: durable URL-pattern priors from past opener/time/feedback
+ *   5. Model extraUnions (second layer): LLM on short summaries decides
+ *      same-project merges. Slug/product keys only propose candidates.
+ *   6. Weak semantic: refine only — sub-split mixed WEAK components.
+ *      Project regex is NOT a union authority.
  *
  * Union-find / connected components. Session merge/split overrides are the
  * extension point for user feedback (weights adjusted separately in nav-priors).
  */
 import { LEARNED_UNION_THRESHOLD, TIME_ADJACENCY_MS } from './constants.js';
 import { priorWeight } from './nav-priors.js';
-import { projectDisplayName, sharesProjectAffinity } from './project-affinity.js';
+import { projectDisplayName } from './project-affinity.js';
 
 /**
  * @typedef {{
@@ -160,17 +160,9 @@ export function buildTaskClusters(nodes, opts = {}) {
     }
   }
 
-  // 3) Project affinity (product slug / local app / repo prefix). Titles do not block.
-  for (let i = 0; i < list.length; i++) {
-    for (let j = i + 1; j < list.length; j++) {
-      const a = list[i];
-      const b = list[j];
-      if (!sharesProjectAffinity(a.url, b.url)) continue;
-      tryUnion(a.id, b.id, 'project', true);
-    }
-  }
+  // Project slug / path / loopback are NOT union keys (model + opener/time/feedback only).
 
-  // 4) Medium: time adjacency, same window, labels compatible
+  // 3) Medium: time adjacency, same window, labels compatible
   for (let i = 0; i < list.length; i++) {
     for (let j = i + 1; j < list.length; j++) {
       const a = list[i];

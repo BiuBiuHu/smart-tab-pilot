@@ -26,10 +26,10 @@ nodes = tabs + lineage + semanticLabel
 UF = {}
 
 union sessionMerges          // 用户反馈
-union extraUnions            // 可选：模型同组（第二层，只加并）
+union extraUnions            // 模型同组（权威第二层，只加并；slug 不是权威）
 union openerTabId            // 强：标签树，可跨窗（lineage）
 union referrer → 打开中 URL  // 强-中：点击来源
-union project affinity       // 强-中：产品 slug / 本地同端口 / origin+两段 path；标题不拆
+// product key / loopback / prefix = candidate features ONLY
 union time-adjacent          // 中：同窗 + createdAt 差 ≤ 45s + 主题兼容
 union learned prior ≥ 0.35   // 弱：历史 opener/时间/反馈
 forbid sessionSplits

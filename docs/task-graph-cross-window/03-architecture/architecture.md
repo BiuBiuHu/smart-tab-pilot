@@ -6,6 +6,7 @@
 |------|------|------|------|
 | v0.1 | 2026-11-03 | 任务导航图 / navigation graph learning | 用户要求可学习来源 + 跨窗口 |
 | v0.2 | 2026-11-03 | 项目亲和 + 短摘要 + 同窗同名物理组合一 | Bettr 过碎；两个「LinkE」 |
+| v0.3 | 2026-11-03 | slug 只提候选；模型根据短摘要并组。跨窗口不是拆组原因 | Unio/Marketing 分簇 |
 
 ## 1. 命名
 
@@ -104,11 +105,13 @@ tabId → { title, url, pathKey, slugs[], excerpt≤280, extractedAt }
 
 ## 4. 聚类（union-find）
 
-顺序：会话合并 → opener → referrer 命中 → **项目亲和**（标题不拆）→ 时间（主题兼容）→ 学习 prior（权重 ≥ 0.35 且主题兼容）→ 语义只拆「没有强边、主题混杂」的弱簇 → 可选模型同组（只看短摘要，只加并、不拆强边）。
+顺序：会话合并 → opener → referrer 命中 → 时间（主题兼容）→ 学习 prior → 语义只拆弱混杂簇 → **模型同组**（短摘要；slug 只提供 candidate）。
 
-**禁止**：用裸 hostname 或「仅 label 相同」做并查集 union。同窗**物理组**则按规范化标题合一：不得出现两个「LinkE」。
+**禁止**：用裸 hostname、regex 产品键或「仅 label 相同」做并查集 union。`bettr-promotion` 是特征，不是簇 id。同窗**物理组**按规范化标题合一。
 
-任务显示名 = `projectDisplayName`（如 Bettr Promotion）或簇内多数主题；混合 opener / 项目链保留整簇。
+**跨窗口不是拆组原因**：逻辑簇本就可跨窗。Unio / Marketing / Marmot / ac.alipay 应在模型判定后成为同一逻辑任务「Bettr Promotion」。
+
+任务显示名 = canonical 产品名（Bettr Promotion，不含 Unio/Marketing）或多数主题。
 
 ## 5. 物理 vs 逻辑
 

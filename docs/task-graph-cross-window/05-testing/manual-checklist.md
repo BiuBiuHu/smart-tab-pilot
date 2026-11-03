@@ -22,8 +22,8 @@
 | TC-TASK-04 | 从 issue 点开 docs，关标签后再开同类 issue+docs | 第二次更可能并成一任务（学习边） |
 | TC-TASK-05 | 「与上一任务合并」再刷新 | 并成一簇；文案提示加强权重 |
 | TC-TASK-06 | 「拆成独立任务」 | 会话内不再并回 |
-| TC-TASK-07 | 同端口 `127.0.0.1` 多个 demo（创建权益 / 活动管理 / 批量发奖 / BETTR 平台） | **一个**任务，不被页标题拆开 |
-| TC-TASK-08 | marmot `…/bettr/bettr-promotion` + 营销台 host + alipay `bettr-promotion-dev-unio`（可跨窗） | 一个「Bettr Promotion」；侧栏可见「项目×N」 |
+| TC-TASK-07 | 同端口 `127.0.0.1` 多个 demo | 无模型时不靠 regex 硬并；有 Nano/自定义且摘要同类 → 一个任务 |
+| TC-TASK-08 | Unio + Marmot + Marketing console + `ac.alipay.com/page/bettr-promotion`（可跨窗） | 侧栏 **一个**「Bettr Promotion」（不要 Unio/Marketing 分簇）。**不是因为窗口才拆开** |
 | TC-TASK-09 | 同窗已有「LinkE」组，再整理相邻同名标签 | **仍只有一个**「LinkE」物理组；「BIGP一期 迭代」同理，不得并排两个同名组 |
 | TC-TASK-10 | 打开若干页后看 `chrome.storage.session.tabSummaries` | 每标签只有 title / pathKey / slugs / 短 excerpt；无整页正文 |
 

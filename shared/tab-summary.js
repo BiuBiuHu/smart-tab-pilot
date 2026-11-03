@@ -7,7 +7,7 @@ import {
   TAB_SUMMARY_STORE_CAP,
   TAB_SUMMARY_TITLE_MAX,
 } from './constants.js';
-import { projectAffinityKeys } from './project-affinity.js';
+import { canonicalProductKeys, projectAffinityKeys } from './project-affinity.js';
 
 /**
  * @typedef {{
@@ -15,6 +15,7 @@ import { projectAffinityKeys } from './project-affinity.js';
  *   url: string,
  *   pathKey: string,
  *   slugs: string[],
+ *   productKeys: string[],
  *   excerpt: string,
  *   extractedAt: number,
  * }} TabSummary
@@ -74,6 +75,7 @@ export function buildTabSummary(input) {
     url,
     pathKey: summaryPathKey(url),
     slugs: keys.slugs.slice(0, 6),
+    productKeys: canonicalProductKeys(url).slice(0, 6),
     excerpt: excerptSentences(input.text || ''),
     extractedAt: input.extractedAt ?? Date.now(),
   };
@@ -110,7 +112,11 @@ export function capSummaryStore(store, cap = TAB_SUMMARY_STORE_CAP) {
  */
 export function formatSummaryLine(s) {
   if (!s) return '';
-  const slug = (s.slugs || []).slice(0, 3).join(',') || s.pathKey || '';
+  const slug =
+    (s.productKeys || []).slice(0, 2).join(',') ||
+    (s.slugs || []).slice(0, 3).join(',') ||
+    s.pathKey ||
+    '';
   const bits = [s.title, slug, s.excerpt].filter(Boolean);
   return clipText(bits.join(' · '), TAB_SUMMARY_TITLE_MAX + TAB_SUMMARY_EXCERPT_MAX + 40);
 }
