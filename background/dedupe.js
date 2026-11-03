@@ -1,59 +1,42 @@
 /**
- * Exact-URL duplicate jump: activate existing tab, close the new one.
- * Same-window only. Prefer the older existing tab; never remove the match first.
+ * Exact-URL duplicate jump: activate existing tab (any window), close the new one.
+ * Prefer the older existing tab; never remove the match first.
  */
+import { findExactUrlMatch } from '../shared/dedupe-match.js';
 import { getSettings } from '../shared/storage.js';
-import { normalizeUrl, shouldSkipUrl } from '../shared/url-utils.js';
+import { shouldSkipUrl } from '../shared/url-utils.js';
 import { suppressClosedRecord } from './recent-closed.js';
 
 /** Tabs we just closed (or are closing) as duplicates — avoid re-entry / matching them. */
 const closingTabIds = new Set();
 
 /**
- * On navigation commit / complete, if another tab in the same window already
- * has the same URL, focus that tab and close this one.
+ * On navigation commit / complete, if another tab (any window) already
+ * has the same URL, focus that window+tab and close this one.
  * @param {number} tabId
  * @param {string} url
- * @param {number | undefined} windowId
+ * @param {number | undefined} windowId unused (kept for call-site compatibility)
  * @returns {Promise<boolean>} true if this tab was closed as a duplicate
  */
 export async function handleExactDedupe(tabId, url, windowId) {
+  void windowId;
   if (closingTabIds.has(tabId)) return false;
   if (!url || shouldSkipUrl(url)) return false;
-  // Require window scope — never cross-window dedupe (MVP).
-  if (windowId == null) return false;
 
   const settings = await getSettings();
   if (!settings.exactDedupeEnabled) return false;
 
-  const ignoreHash = settings.ignoreHash === true;
-  const target = normalizeUrl(url, { ignoreHash });
-  if (!target) return false;
-
   let tabs;
   try {
-    tabs = await chrome.tabs.query({ windowId });
+    tabs = await chrome.tabs.query({});
   } catch {
     return false;
   }
 
-  const candidates = tabs.filter((t) => {
-    if (t.id == null || t.id === tabId) return false;
-    if (closingTabIds.has(t.id)) return false;
-    if (!t.url || shouldSkipUrl(t.url)) return false;
-    return normalizeUrl(t.url, { ignoreHash }) === target;
+  const match = findExactUrlMatch(tabs, tabId, url, {
+    ignoreHash: settings.ignoreHash === true,
+    closingTabIds,
   });
-
-  if (!candidates.length) return false;
-
-  // Prefer the oldest / left-most existing tab (stable "already open" target).
-  candidates.sort((a, b) => {
-    const ia = typeof a.index === 'number' ? a.index : 0;
-    const ib = typeof b.index === 'number' ? b.index : 0;
-    if (ia !== ib) return ia - ib;
-    return (a.id || 0) - (b.id || 0);
-  });
-  const match = candidates[0];
   if (!match || match.id == null) return false;
 
   closingTabIds.add(tabId);

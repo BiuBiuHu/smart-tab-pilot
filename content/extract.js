@@ -164,4 +164,17 @@
     }
     return false;
   });
+
+  // Click-source / referrer path for 任务导航图 when openerTabId is missing.
+  try {
+    const referrer = document.referrer || '';
+    if (referrer) {
+      chrome.runtime.sendMessage(
+        { type: 'TAB_NAV_HINT', payload: { url: location.href, referrer } },
+        () => void chrome.runtime.lastError,
+      );
+    }
+  } catch {
+    /* ignore */
+  }
 })();

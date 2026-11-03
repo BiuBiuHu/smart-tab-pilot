@@ -1,21 +1,25 @@
 # Smart Tab Pilot
 
-Manifest V3 Chrome 扩展：**精确 URL 去重跳转** + **基于页面正文的语义标签分组**（同域不同主题分不同组，不按域名聚合）。UI 使用 Chrome **侧边栏（side panel）**占满浏览器侧栏；快速搜索为可选能力（侧边栏内默认关闭）。
+Manifest V3 Chrome 扩展：**精确 URL 去重跳转（跨窗口）** + **任务导航图归组**（来源 / 时间优先，语义只作精炼与命名；同域不同主题分不同任务，不按域名聚合）。UI 使用 Chrome **侧边栏（side panel）**占满浏览器侧栏；快速搜索为可选能力（侧边栏内默认关闭）。
 
 纯前端 JS，无需构建步骤；可直接「加载已解压的扩展程序」。开源协议：[MIT](./LICENSE)。
 
 ## 功能
 
 1. **精确 URL 去重**  
-   同窗口内若已有标签页打开了相同 URL，则激活已有标签并关闭新标签。  
+   任一窗口若已有标签页打开了相同 URL，则**聚焦该窗口并激活已有标签**，关闭新标签。  
    - 默认 **精确匹配（含 hash）**：设置项 `ignoreHash` 默认为 `false`。  
    - 可在侧边栏中开启「去重时忽略 hash」。  
    - 跳过 `chrome://`、`chrome-extension://`、`about:`、`edge://` 等内部页。
 
-2. **语义分组（按页面正文，而非域名）**  
-   - Content Script 抽取紧凑的**文本 DOM 快照**（标题 + 语义主区域 + h1–h3 + 可见正文，去掉导航/页脚噪音，硬上限约 4000 字符）。  
-   - Background 用 AI / 启发式打出短中/英文**主题**标签，并放入对应的 `chrome.tabGroups`（按标签名合并；**禁止**用 hostname/站点名并组）。  
-   - **同域名下不同主题必须进入不同组。**
+2. **任务导航图（navigation graph learning）**  
+   - 强边：`openerTabId` 标签树；`document.referrer` 命中另一个打开中的页面。  
+   - 中边：同一窗口、短时间相邻打开（默认 45s）。  
+   - 弱边：标签关闭后记住 origin+path 模式对，同类导航会加强关联。  
+   - 语义（Nano / 自定义 / 启发式）只用于**精炼与命名**，不是主合并键。  
+   - **禁止按域名聚合**；同域不同任务 / 不同主题必须分开。  
+   - `chrome.tabGroups` 仍按窗口物理写入；跨窗口只做逻辑聚合。  
+   - 侧栏可「与上一任务合并 / 拆成独立任务」（调整边权的扩展点）。
 
 3. **模型策略**  
    - 优先 Chrome 内置 Prompt API `LanguageModel`（Gemini Nano）。  
@@ -72,9 +76,12 @@ Manifest V3 Chrome 扩展：**精确 URL 去重跳转** + **基于页面正文�
 | 下载 Nano | 在可下载时触发 `LanguageModel.create()` |
 | 精确 URL 去重跳转 | 开关去重 |
 | 去重时忽略 hash | 默认关闭＝含 hash 精确匹配 |
-| 自动语义分组 | 页面 load complete 后自动分类并进组 |
-| 自定义模型字段 | Base URL / API Key / 模型名 |
-| 立即分组当前窗口 | 对当前窗口所有可访问标签立即抽取并分组 |
+| 任务视图 | 按任务导航图列出标签；窗口徽章；点行跳转 |
+| 全部窗口 / 仅当前窗口 | 默认全部窗口；切换会保存 |
+| 立即整理任务 | 按当前范围抽取 + 建图 + 各窗物理进组 |
+| 与上一任务合并 / 拆成独立任务 | 反馈扩展点：改会话边与学习权重 |
+| 自动按任务归组 | 页面 load complete 后按任务导航图进组 |
+| 自定义模型字段 | Base URL / API Key / 模型名（只给任务命名，不按域名并组） |
 
 ## 目录结构
 
@@ -87,8 +94,10 @@ smart-tab-pilot/
 ├── background/
 │   ├── service-worker.js   # MV3 入口
 │   ├── dedupe.js           # 精确 URL 去重
-│   ├── grouping.js         # 抽取调度 + tabGroups
-│   ├── classifier.js       # Nano / 自定义 / 启发式
+│   ├── grouping.js         # 任务簇调度 + 按窗 tabGroups
+│   ├── tab-lineage.js      # 存活 opener / 时间 / referrer
+│   ├── nav-memory.js       # 关闭落 prior + 反馈扩展点
+│   ├── classifier.js       # Nano / 自定义 / 启发式（命名）
 │   ├── recent-closed.js    # 关闭标签追踪（storage.local）
 │   └── search.js           # 打开/关闭标签快速搜索
 ├── content/
@@ -97,11 +106,18 @@ smart-tab-pilot/
 │   ├── sidepanel.html      # 侧边栏 UI（主入口）
 │   ├── sidepanel.js
 │   └── sidepanel.css
+├── docs/
+│   ├── smart-tab-pilot-mvp/          # MVP 门禁文档
+│   └── task-graph-cross-window/      # 任务导航图 + 跨窗口
 ├── popup/                  # 旧弹窗（未使用，仅对照）
 └── shared/
     ├── constants.js
     ├── storage.js
-    └── url-utils.js
+    ├── url-utils.js
+    ├── url-pattern.js      # 学习边用的 origin+path 模式
+    ├── nav-priors.js       # prior 加减权
+    ├── task-graph.js       # 任务导航图 union-find
+    └── dedupe-match.js     # 跨窗口精确 URL 匹配
 ```
 
 ## 权限
@@ -139,4 +155,6 @@ smart-tab-pilot/
 npm test
 ```
 
-手工清单见 `docs/smart-tab-pilot-mvp/05-testing/manual-checklist.md`。
+手工清单见 `docs/smart-tab-pilot-mvp/05-testing/manual-checklist.md` 与 `docs/task-graph-cross-window/05-testing/manual-checklist.md`。
+
+任务导航图设计见 `docs/task-graph-cross-window/01-product/PRD.md`。

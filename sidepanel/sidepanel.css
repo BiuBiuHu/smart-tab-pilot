@@ -316,3 +316,151 @@ body {
   color: var(--muted);
   font-size: 12px;
 }
+
+/* —— Task view / 任务导航图 —— */
+.scope-toggle {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.scope-option {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  user-select: none;
+}
+
+.scope-option:has(input:checked) {
+  border-color: var(--primary);
+  background: rgba(20, 184, 166, 0.12);
+  color: var(--text);
+}
+
+.scope-option input {
+  accent-color: var(--primary);
+}
+
+.task-toolbar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.btn-inline {
+  flex: 1;
+  margin-top: 0;
+  padding: 9px 10px;
+}
+
+.task-clusters {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.task-cluster {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  background: #0f172a;
+}
+
+.task-cluster-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.task-cluster-title {
+  font-weight: 600;
+  font-size: 13.5px;
+}
+
+.task-cluster-meta {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.task-cluster-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 6px 0 4px;
+}
+
+.btn-text {
+  background: none;
+  border: none;
+  color: var(--primary);
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.btn-text:hover {
+  text-decoration: underline;
+}
+
+.task-tab-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.task-tab {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  padding: 7px 8px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.task-tab:hover {
+  background: rgba(20, 184, 166, 0.12);
+  border-color: rgba(20, 184, 166, 0.35);
+}
+
+.win-badge {
+  flex-shrink: 0;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #334155;
+  color: #e2e8f0;
+  white-space: nowrap;
+}
+
+.task-tab .meta {
+  min-width: 0;
+}
+
+.task-tab .title,
+.task-tab .url {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.task-tab .url {
+  font-size: 12px;
+  color: var(--muted);
+}

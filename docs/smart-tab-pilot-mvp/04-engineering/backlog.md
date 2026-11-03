@@ -38,6 +38,7 @@
 | TASK-007 | （可选）收敛搜索 UI/文案/sessions | popup/manifest/README | P1 | pending | 与 PRD 一致 |
 | TASK-008 | 搜索产品化验收 | search/recent-closed | P1 | deferred | 新 PRD 修订 |
 | TASK-009 | 商店上架准备 | ops | P2 | deferred | listing+隐私 |
+| TASK-010 | 任务导航图 + 跨窗口 + 学习 prior | task-graph / sidepanel | P0 | done（本增量） | `docs/task-graph-cross-window/` |
 
 ## 4. 执行顺序和阻塞
 

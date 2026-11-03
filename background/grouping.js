@@ -1,13 +1,47 @@
 /**
- * Semantic tab grouping by page-body topic labels → chrome.tabGroups.
+ * Task-aware grouping: 任务导航图 clusters → per-window chrome.tabGroups.
+ * Cross-window clusters are logical only; physical groups stay in one windowId.
  */
-import { GROUP_COLORS, MAX_BODY_CHARS, MSG } from '../shared/constants.js';
+import { GROUP_COLORS, LABEL_CACHE_KEY, MAX_BODY_CHARS, MSG, TIME_ADJACENCY_MS } from '../shared/constants.js';
 import { getSettings } from '../shared/storage.js';
+import { buildTaskClusters } from '../shared/task-graph.js';
 import { shouldSkipUrl } from '../shared/url-utils.js';
+import { heuristicLabel, sanitizeLabel } from '../shared/label-utils.js';
 import { classifyPage } from './classifier.js';
+import { loadPriors, loadSessionFeedback } from './nav-memory.js';
+import { attachLineage, hydrateLineage, patchLineage } from './tab-lineage.js';
 
-/** label(lower) → color index assignment cache per window session */
+/** label(lower) → color index assignment cache per session */
 const labelColorIndex = new Map();
+
+/** @type {Map<number, { label: string, source: string }>} */
+const labelCache = new Map();
+
+async function persistLabelCache() {
+  const obj = /** @type {Record<string, { label: string, source: string }>} */ ({});
+  for (const [id, v] of labelCache) obj[String(id)] = v;
+  try {
+    await chrome.storage.session.set({ [LABEL_CACHE_KEY]: obj });
+  } catch {
+    /* ignore */
+  }
+}
+
+export async function hydrateLabelCache() {
+  try {
+    const bag = await chrome.storage.session.get(LABEL_CACHE_KEY);
+    const raw = bag[LABEL_CACHE_KEY];
+    if (!raw || typeof raw !== 'object') return;
+    for (const [k, v] of Object.entries(raw)) {
+      const id = Number(k);
+      if (Number.isFinite(id) && v && typeof v.label === 'string') {
+        labelCache.set(id, { label: v.label, source: v.source || 'heuristic' });
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+}
 
 /**
  * Extract readable text from a tab via content script message, with executeScript fallback.
@@ -107,8 +141,8 @@ function extractInPage(maxChars) {
 }
 
 /**
- * Find or create a tab group in the window whose title matches label.
- * Groups merge ONLY by semantic label (case-insensitive). Never by domain/hostname.
+ * Place tabs into a physical group in ONE window. Does not merge different
+ * task clusters that happen to share a topic title.
  * @param {number} windowId
  * @param {string} label
  * @param {number[]} tabIds
@@ -116,21 +150,35 @@ function extractInPage(maxChars) {
 export async function placeTabsInGroup(windowId, label, tabIds) {
   if (!tabIds.length) return;
 
-  const groups = await chrome.tabGroups.query({ windowId });
-  const existing = groups.find(
-    (g) => (g.title || '').trim().toLowerCase() === label.trim().toLowerCase(),
-  );
+  const tabs = await chrome.tabs.query({ windowId });
+  const inWindow = tabIds.filter((id) => tabs.some((t) => t.id === id));
+  if (!inWindow.length) return;
+  const inWindowSet = new Set(inWindow);
+  const none = chrome.tabGroups?.TAB_GROUP_ID_NONE ?? -1;
 
-  if (existing) {
-    await chrome.tabs.group({ groupId: existing.id, tabIds });
-    if ((existing.title || '') !== label) {
-      await chrome.tabGroups.update(existing.id, { title: label });
+  // Reuse a group only when it contains our tabs and no foreign task members.
+  /** @type {number | null} */
+  let reusable = null;
+  const seen = new Set();
+  for (const t of tabs) {
+    if (t.id == null || !inWindowSet.has(t.id)) continue;
+    if (typeof t.groupId !== 'number' || t.groupId === none || seen.has(t.groupId)) continue;
+    seen.add(t.groupId);
+    const foreign = tabs.some(
+      (other) => other.groupId === t.groupId && other.id != null && !inWindowSet.has(other.id),
+    );
+    if (!foreign) {
+      reusable = t.groupId;
+      break;
     }
-    return existing.id;
   }
 
+  const groupId =
+    reusable != null
+      ? (await chrome.tabs.group({ groupId: reusable, tabIds: inWindow }), reusable)
+      : await chrome.tabs.group({ tabIds: inWindow, createProperties: { windowId } });
+
   const color = pickColor(label);
-  const groupId = await chrome.tabs.group({ tabIds, createProperties: { windowId } });
   await chrome.tabGroups.update(groupId, { title: label, color, collapsed: false });
   return groupId;
 }
@@ -145,7 +193,102 @@ function pickColor(label) {
 }
 
 /**
- * Classify one tab and move it into the matching group.
+ * Classify one tab (full extract) and cache the topic label.
+ * @param {chrome.tabs.Tab} tab
+ */
+async function classifyAndCache(tab) {
+  const content = await extractPageContent(tab.id);
+  const page = content || {
+    title: tab.title || '',
+    text: '',
+    url: tab.url || '',
+  };
+  const result = await classifyPage(page);
+  labelCache.set(tab.id, result);
+  void persistLabelCache();
+  return result;
+}
+
+/**
+ * @param {chrome.tabs.Tab} tab
+ * @param {boolean} fullExtract
+ */
+async function labelForTab(tab, fullExtract) {
+  if (tab.id == null) return { label: '未分类', source: 'heuristic' };
+  if (!fullExtract && labelCache.has(tab.id)) return labelCache.get(tab.id);
+  if (fullExtract) return classifyAndCache(tab);
+  const cached = labelCache.get(tab.id);
+  if (cached) return cached;
+  const label = sanitizeLabel(heuristicLabel(tab.title || '', '', tab.url || ''));
+  return { label, source: 'heuristic' };
+}
+
+/**
+ * @param {chrome.tabs.Tab[]} tabs
+ * @param {{ fullExtract?: boolean, onlyTabId?: number }} [opts]
+ */
+async function nodesFromTabs(tabs, opts = {}) {
+  await hydrateLineage();
+  await hydrateLabelCache();
+  const attached = attachLineage(tabs);
+  const nodes = [];
+  for (let i = 0; i < tabs.length; i++) {
+    const tab = tabs[i];
+    if (tab.id == null || shouldSkipUrl(tab.url || attached[i].url)) continue;
+    const full = opts.fullExtract === true || opts.onlyTabId === tab.id;
+    const { label, source } = await labelForTab(tab, full);
+    nodes.push({
+      ...attached[i],
+      id: tab.id,
+      windowId: tab.windowId,
+      semanticLabel: label,
+      source,
+    });
+  }
+  return nodes;
+}
+
+/**
+ * @param {import('../shared/task-graph.js').TaskNode[]} nodes
+ */
+async function clusterNodes(nodes) {
+  const [priors, session] = await Promise.all([loadPriors(), loadSessionFeedback()]);
+  return buildTaskClusters(nodes, {
+    timeWindowMs: TIME_ADJACENCY_MS,
+    priors,
+    sessionMerges: session.merges,
+    sessionSplits: session.splits,
+  });
+}
+
+/**
+ * Apply physical chrome.tabGroups per window for each logical cluster.
+ * @param {import('../shared/task-graph.js').TaskCluster[]} clusters
+ * @param {import('../shared/task-graph.js').TaskNode[]} nodes
+ */
+async function applyPhysicalGroups(clusters, nodes) {
+  const nodeById = new Map(nodes.map((n) => [n.id, n]));
+  for (const cluster of clusters) {
+    /** @type {Map<number, number[]>} */
+    const byWindow = new Map();
+    for (const tabId of cluster.tabIds) {
+      const n = nodeById.get(tabId);
+      if (!n) continue;
+      if (!byWindow.has(n.windowId)) byWindow.set(n.windowId, []);
+      byWindow.get(n.windowId).push(tabId);
+    }
+    for (const [windowId, tabIds] of byWindow) {
+      try {
+        await placeTabsInGroup(windowId, cluster.label, tabIds);
+      } catch (err) {
+        console.warn('[SmartTabPilot] physical group failed', windowId, err);
+      }
+    }
+  }
+}
+
+/**
+ * Classify one tab and move it into its task cluster's per-window group.
  * @param {chrome.tabs.Tab} tab
  * @returns {Promise<{ ok: boolean, label?: string, source?: string, reason?: string }>}
  */
@@ -157,24 +300,27 @@ export async function groupSingleTab(tab) {
     return { ok: false, reason: 'skipped-url' };
   }
 
-  const content = await extractPageContent(tab.id);
-  const page = content || {
-    title: tab.title || '',
-    text: '',
-    url: tab.url || '',
-  };
+  const all = await chrome.tabs.query({});
+  const nodes = await nodesFromTabs(all, { onlyTabId: tab.id });
+  const clusters = await clusterNodes(nodes);
+  const mine = clusters.find((c) => c.tabIds.includes(tab.id));
+  if (!mine) return { ok: false, reason: 'no-cluster' };
 
-  const { label, source } = await classifyPage(page);
-  await placeTabsInGroup(tab.windowId, label, [tab.id]);
-  return { ok: true, label, source };
+  const sameWindow = mine.tabIds.filter((id) => {
+    const n = nodes.find((x) => x.id === id);
+    return n && n.windowId === tab.windowId;
+  });
+  await placeTabsInGroup(tab.windowId, mine.label, sameWindow.length ? sameWindow : [tab.id]);
+  const labeled = nodes.find((n) => n.id === tab.id);
+  return { ok: true, label: mine.label, source: labeled?.source || 'heuristic' };
 }
+
+const pendingGroup = new Map();
 
 /**
  * Auto-group after a tab finishes loading (debounced lightly per tab).
  * @param {number} tabId
  */
-const pendingGroup = new Map();
-
 export function scheduleAutoGroup(tabId) {
   const prev = pendingGroup.get(tabId);
   if (prev) clearTimeout(prev);
@@ -190,7 +336,6 @@ export function scheduleAutoGroup(tabId) {
         if (shouldSkipUrl(tab.url)) return;
         await groupSingleTab(tab);
       } catch (err) {
-        // Tab may have been closed by dedupe — expected.
         console.warn('[SmartTabPilot] auto-group error', err);
       }
     }, 800),
@@ -198,44 +343,126 @@ export function scheduleAutoGroup(tabId) {
 }
 
 /**
- * Group every eligible tab in a window; coalesce same labels.
- * @param {number} windowId
+ * @param {{ allWindows?: boolean, windowId?: number, applyPhysical?: boolean }} [opts]
  */
-export async function groupCurrentWindow(windowId) {
-  const tabs = await chrome.tabs.query({ windowId });
-  /** @type {Map<string, { tabIds: number[], source: string }>} */
-  const byLabel = new Map();
-  /** @type {{ tabId: number, label: string, source: string }[]} */
-  const results = [];
-
-  for (const tab of tabs) {
-    if (tab.id == null || shouldSkipUrl(tab.url)) continue;
-    const content = await extractPageContent(tab.id);
-    const page = content || {
-      title: tab.title || '',
-      text: '',
-      url: tab.url || '',
-    };
-    const { label, source } = await classifyPage(page);
-    const key = label.toLowerCase();
-    if (!byLabel.has(key)) byLabel.set(key, { tabIds: [], source });
-    byLabel.get(key).tabIds.push(tab.id);
-    results.push({ tabId: tab.id, label, source });
+export async function groupTabs(opts = {}) {
+  const applyPhysical = opts.applyPhysical !== false;
+  let tabs;
+  if (opts.allWindows === false && opts.windowId != null) {
+    tabs = await chrome.tabs.query({ windowId: opts.windowId });
+  } else if (opts.allWindows === false) {
+    const current = await chrome.windows.getLastFocused();
+    if (current?.id == null) return { ok: false, error: 'no-window' };
+    tabs = await chrome.tabs.query({ windowId: current.id });
+  } else {
+    tabs = await chrome.tabs.query({});
   }
 
-  for (const [key, { tabIds }] of byLabel) {
-    // Prefer original casing from first result
-    const label = results.find((r) => r.label.toLowerCase() === key)?.label || key;
-    await placeTabsInGroup(windowId, label, tabIds);
+  const nodes = await nodesFromTabs(tabs, { fullExtract: true });
+  const clusters = await clusterNodes(nodes);
+  if (applyPhysical) {
+    await applyPhysicalGroups(clusters, nodes);
   }
+
+  const sources = nodes.reduce((acc, n) => {
+    const s = n.source || 'heuristic';
+    acc[s] = (acc[s] || 0) + 1;
+    return acc;
+  }, /** @type {Record<string, number>} */ ({}));
 
   return {
     ok: true,
-    grouped: results.length,
-    labels: [...new Set(results.map((r) => r.label))],
-    sources: results.reduce((acc, r) => {
-      acc[r.source] = (acc[r.source] || 0) + 1;
-      return acc;
-    }, /** @type {Record<string, number>} */ ({})),
+    grouped: nodes.length,
+    labels: [...new Set(clusters.map((c) => c.label))],
+    sources,
+    clusters,
   };
+}
+
+/**
+ * Group every eligible tab in a window (compat wrapper).
+ * @param {number} windowId
+ */
+export async function groupCurrentWindow(windowId) {
+  return groupTabs({ allWindows: false, windowId });
+}
+
+/**
+ * Logical task view for the side panel (no forced re-extract).
+ * @param {{ allWindows?: boolean }} [opts]
+ */
+export async function getTaskView(opts = {}) {
+  await hydrateLineage();
+  await hydrateLabelCache();
+  const allWindows = opts.allWindows !== false;
+  const allTabs = await chrome.tabs.query({});
+  let windowFilter = null;
+  if (!allWindows) {
+    const current = await chrome.windows.getLastFocused();
+    windowFilter = current?.id ?? null;
+  }
+
+  const windows = await chrome.windows.getAll();
+  const focusedId = (await chrome.windows.getLastFocused().catch(() => null))?.id;
+  const windowOrder = windows.map((w) => w.id).sort((a, b) => a - b);
+  const windowBadge = new Map();
+  windowOrder.forEach((id, i) => {
+    windowBadge.set(id, id === focusedId ? '当前' : `窗口 ${i + 1}`);
+  });
+
+  const eligible = allTabs.filter((t) => t.id != null && !shouldSkipUrl(t.url));
+  const nodes = await nodesFromTabs(eligible, { fullExtract: false });
+  const clusters = await clusterNodes(nodes);
+  const nodeById = new Map(nodes.map((n) => [n.id, n]));
+  const tabById = new Map(allTabs.map((t) => [t.id, t]));
+
+  const viewClusters = clusters
+    .map((c) => {
+      const tabs = c.tabIds
+        .map((id) => {
+          const n = nodeById.get(id);
+          const t = tabById.get(id);
+          if (!n || !t) return null;
+          if (windowFilter != null && n.windowId !== windowFilter) return null;
+          return {
+            tabId: id,
+            windowId: n.windowId,
+            windowBadge: windowBadge.get(n.windowId) || `窗口`,
+            title: t.title || n.url || '',
+            url: t.url || n.url || '',
+            favIconUrl: t.favIconUrl || '',
+            topic: n.semanticLabel || '',
+          };
+        })
+        .filter(Boolean);
+      return {
+        id: c.id,
+        label: c.label,
+        edges: c.edges,
+        windowIds: [...new Set(tabs.map((t) => t.windowId))],
+        tabs,
+      };
+    })
+    .filter((c) => c.tabs.length);
+
+  return {
+    ok: true,
+    allWindows,
+    currentWindowId: focusedId,
+    clusters: viewClusters,
+    tabCount: viewClusters.reduce((n, c) => n + c.tabs.length, 0),
+  };
+}
+
+/**
+ * Content-script navigation hint (document.referrer as click-source fallback).
+ * @param {number | undefined} tabId
+ * @param {{ url?: string, referrer?: string }} hint
+ */
+export function applyNavHint(tabId, hint) {
+  if (tabId == null) return;
+  const patch = {};
+  if (hint.url) patch.url = hint.url;
+  if (hint.referrer) patch.referrerUrl = hint.referrer;
+  if (Object.keys(patch).length) patchLineage(tabId, patch);
 }

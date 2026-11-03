@@ -10,9 +10,30 @@
   <div class="panel">
     <header class="header">
       <h1>Smart Tab Pilot</h1>
-      <p class="subtitle">精确去重 · 按正文语义分组（同域不同主题分不同组）</p>
+      <p class="subtitle">精确去重 · 任务导航图（来源优先，语义精炼）</p>
       <p class="panel-hint">侧边栏面板 · 点击工具栏图标即可打开</p>
     </header>
+
+    <section class="card" id="task-view-card">
+      <div class="card-title">任务视图</div>
+      <div class="scope-toggle" role="radiogroup" aria-label="窗口范围">
+        <label class="scope-option">
+          <input type="radio" name="win-scope" id="scope-all" value="all" checked />
+          <span>全部窗口</span>
+        </label>
+        <label class="scope-option">
+          <input type="radio" name="win-scope" id="scope-current" value="current" />
+          <span>仅当前窗口</span>
+        </label>
+      </div>
+      <div class="task-toolbar">
+        <button id="btn-refresh-tasks" class="btn btn-secondary btn-inline" type="button">刷新</button>
+        <button id="btn-group-now" class="btn btn-primary btn-inline" type="button">立即整理任务</button>
+      </div>
+      <p id="task-empty" class="hint">正在加载任务…</p>
+      <div id="task-clusters" class="task-clusters" hidden></div>
+      <p id="action-result" class="hint result" aria-live="polite"></p>
+    </section>
 
     <section class="card search-card" id="search-card" hidden>
       <div class="card-title">快速搜索 <span class="hint-inline">（可选 / 默认关闭）</span></div>
@@ -56,7 +77,7 @@
       </label>
       <label class="toggle">
         <input type="checkbox" id="toggle-auto-group" />
-        <span>自动语义分组（按正文主题，不按域名）</span>
+        <span>自动按任务归组（来源/时间优先，语义只作精炼）</span>
       </label>
       <label class="toggle">
         <input type="checkbox" id="toggle-quick-search" />
@@ -80,11 +101,6 @@
         <input type="text" id="custom-model" placeholder="gpt-4o-mini" autocomplete="off" />
       </label>
       <button id="btn-save-custom" class="btn btn-secondary">保存自定义模型</button>
-    </section>
-
-    <section class="card">
-      <button id="btn-group-now" class="btn btn-primary btn-block">立即分组当前窗口</button>
-      <p id="action-result" class="hint result" aria-live="polite"></p>
     </section>
 
     <footer class="footer">

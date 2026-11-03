@@ -1,8 +1,8 @@
 # MVP 手工验收清单（编码轮）
 
-- 扩展版本：`1.2.0`（manifest）
-- 分支：`feature/smart-tab-pilot-mvp`
-- 纯函数自检：`npm test`（`normalizeUrl` / 域名标签拒绝 / 同域不同主题启发式）
+- 扩展版本：`1.4.0`（manifest）
+- 增量清单：`docs/task-graph-cross-window/05-testing/manual-checklist.md`
+- 纯函数自检：`npm test`（含任务导航图 / prior / 跨窗口匹配）
 
 ## TC-DEDUP（P0）
 
@@ -13,7 +13,7 @@
 | TC-DEDUP-03 | ignoreHash 关；`/p#1` 与 `/p#2` | 2 标签 | ☐ |
 | TC-DEDUP-04 | ignoreHash 开；同上 | 1 标签 | ☐ |
 | TC-DEDUP-05 | `chrome://version` | 不去重、不崩 | ☐ |
-| TC-DEDUP-06 | 窗口1 有 A；窗口2 开 A | 窗口2 保留（同窗口策略） | ☐ |
+| TC-DEDUP-06 | 窗口1 有 A；窗口2 开 A | 聚焦窗口1 的 A 并关闭新标签 | ☐ |
 
 ## TC-GROUP / 同域不同主题（P0 硬约束）
 

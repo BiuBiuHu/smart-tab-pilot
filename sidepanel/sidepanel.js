@@ -1,5 +1,5 @@
 /**
- * Side panel UI — Chinese strings; MVP toggles + optional quick search (default off).
+ * Side panel UI — 任务导航图视图 + 中文开关；快速搜索默认关闭。
  */
 import { MSG } from '../shared/constants.js';
 
@@ -18,6 +18,11 @@ const customApiKey = $('custom-api-key');
 const customModel = $('custom-model');
 const btnSaveCustom = $('btn-save-custom');
 const btnGroupNow = $('btn-group-now');
+const btnRefreshTasks = $('btn-refresh-tasks');
+const scopeAll = $('scope-all');
+const scopeCurrent = $('scope-current');
+const taskClustersEl = $('task-clusters');
+const taskEmpty = $('task-empty');
 const actionResult = $('action-result');
 const fallbackHint = $('fallback-hint');
 const searchInput = $('search-input');
@@ -38,12 +43,16 @@ let flatResults = [];
 let activeIndex = -1;
 let searchTimer = 0;
 let quickSearchOn = false;
+/** @type {{ id: string, label: string, tabs: any[], edges?: any }[]} */
+let viewClusters = [];
+let allWindowsView = true;
 
 init();
 
 async function init() {
   bind();
   await Promise.all([refreshNano(), loadSettings()]);
+  await refreshTaskView();
   if (quickSearchOn) {
     searchInput.focus();
     await runSearch('');
@@ -71,6 +80,19 @@ function bind() {
   });
   btnSaveCustom.addEventListener('click', onSaveCustom);
   btnGroupNow.addEventListener('click', onGroupNow);
+  btnRefreshTasks.addEventListener('click', () => void refreshTaskView());
+  scopeAll.addEventListener('change', onScopeChange);
+  scopeCurrent.addEventListener('change', onScopeChange);
+  taskClustersEl.addEventListener('click', onTaskClustersClick);
+
+  let viewTimer = 0;
+  const scheduleViewRefresh = () => {
+    clearTimeout(viewTimer);
+    viewTimer = setTimeout(() => void refreshTaskView(), 250);
+  };
+  chrome.tabs.onCreated.addListener(scheduleViewRefresh);
+  chrome.tabs.onRemoved.addListener(scheduleViewRefresh);
+  chrome.windows.onFocusChanged.addListener(scheduleViewRefresh);
 
   searchInput.addEventListener('input', () => {
     if (!quickSearchOn) return;
@@ -269,13 +291,13 @@ function statusHint(avail) {
   switch (avail) {
     case 'available':
     case 'readily':
-      return '将优先使用设备端 Gemini Nano，按页面正文主题分类（同网站不同主题会进不同组）。';
+      return '将优先使用设备端 Gemini Nano 给任务簇打主题名（同网站不同主题仍会分任务）。';
     case 'downloadable':
       return '模型尚未下载。请点击下方按钮（需用户手势）触发下载。';
     case 'downloading':
       return '模型正在下载，请稍候再试。';
     case 'unavailable':
-      return '当前环境无法使用 Nano。可配置下方自定义模型，或使用正文/标题启发式（不会按域名合并）。';
+      return '当前环境无法使用 Nano。可配置下方自定义模型，或使用启发式主题名（任务簇仍以来源/时间为准）。';
     case 'missing':
       return '浏览器未暴露 LanguageModel。请使用支持 Prompt API 的 Chrome（实验旗标 / 足够新的版本）。';
     default:
@@ -291,10 +313,10 @@ function updateFallbackHint(avail) {
   }
   const hasCustom = !!(customBaseUrl.value && customApiKey.value);
   if (hasCustom) {
-    fallbackHint.textContent = '当前将使用自定义 OpenAI 兼容接口按主题分类（非域名）。';
+    fallbackHint.textContent = '当前将使用自定义模型为任务簇命名（分组本身按任务导航图，非域名）。';
   } else {
     fallbackHint.textContent =
-      '无可用模型时，将仅用标题/正文关键词启发式分组（不会用域名作为组名），并在此提示。';
+      '无可用模型时，任务簇以来源/时间/学习边聚合，主题名用启发式（不会用域名作为组名）。';
   }
 }
 
@@ -324,6 +346,9 @@ async function loadSettings() {
   toggleIgnoreHash.checked = s.ignoreHash === true;
   toggleAutoGroup.checked = s.autoSemanticGroupEnabled !== false;
   toggleQuickSearch.checked = s.quickSearchEnabled === true;
+  allWindowsView = s.allWindowsViewEnabled !== false;
+  scopeAll.checked = allWindowsView;
+  scopeCurrent.checked = !allWindowsView;
   applyQuickSearchVisibility(toggleQuickSearch.checked);
   customBaseUrl.value = s.customBaseUrl || '';
   customApiKey.value = s.customApiKey || '';
@@ -351,13 +376,185 @@ async function onSaveCustom() {
   }
 }
 
+async function onScopeChange() {
+  allWindowsView = !!scopeAll.checked;
+  await savePartial({ allWindowsViewEnabled: allWindowsView });
+  await refreshTaskView();
+}
+
+async function refreshTaskView() {
+  try {
+    const res = await send(MSG.GET_TASK_VIEW, { allWindows: allWindowsView });
+    renderTaskView(res);
+  } catch (err) {
+    taskClustersEl.hidden = true;
+    taskEmpty.hidden = false;
+    taskEmpty.textContent = err instanceof Error ? err.message : String(err);
+  }
+}
+
+/** @param {any} res */
+function renderTaskView(res) {
+  viewClusters = res?.clusters || [];
+  taskClustersEl.innerHTML = '';
+  if (!viewClusters.length) {
+    taskClustersEl.hidden = true;
+    taskEmpty.hidden = false;
+    taskEmpty.textContent = allWindowsView
+      ? '当前没有可展示的 http(s) 标签。打开几个页面后再刷新。'
+      : '当前窗口没有可展示的标签。可切换到「全部窗口」。';
+    return;
+  }
+  taskEmpty.hidden = true;
+  taskClustersEl.hidden = false;
+  const frag = document.createDocumentFragment();
+  viewClusters.forEach((cluster, index) => {
+    frag.appendChild(renderCluster(cluster, index));
+  });
+  taskClustersEl.appendChild(frag);
+}
+
+/** @param {any} cluster @param {number} index */
+function renderCluster(cluster, index) {
+  const wrap = document.createElement('div');
+  wrap.className = 'task-cluster';
+  wrap.dataset.clusterId = cluster.id;
+
+  const head = document.createElement('div');
+  head.className = 'task-cluster-head';
+  const title = document.createElement('div');
+  title.className = 'task-cluster-title';
+  const winNote = cluster.windowIds && cluster.windowIds.length > 1 ? ' · 跨窗口（逻辑）' : '';
+  title.textContent = `${cluster.label || '未分类'} · ${cluster.tabs.length} 个标签${winNote}`;
+  const meta = document.createElement('div');
+  meta.className = 'task-cluster-meta';
+  meta.textContent = edgeSummary(cluster.edges);
+  head.append(title, meta);
+
+  const actions = document.createElement('div');
+  actions.className = 'task-cluster-actions';
+  if (index > 0) {
+    const mergeBtn = document.createElement('button');
+    mergeBtn.type = 'button';
+    mergeBtn.className = 'btn-text';
+    mergeBtn.dataset.action = 'merge-prev';
+    mergeBtn.dataset.index = String(index);
+    mergeBtn.textContent = '与上一任务合并';
+    actions.appendChild(mergeBtn);
+  }
+  if (cluster.tabs.length > 1) {
+    const splitBtn = document.createElement('button');
+    splitBtn.type = 'button';
+    splitBtn.className = 'btn-text';
+    splitBtn.dataset.action = 'split';
+    splitBtn.dataset.index = String(index);
+    splitBtn.textContent = '拆成独立任务';
+    actions.appendChild(splitBtn);
+  }
+
+  const list = document.createElement('div');
+  list.className = 'task-tab-list';
+  for (const tab of cluster.tabs) {
+    list.appendChild(renderTaskTab(tab));
+  }
+
+  wrap.append(head, actions, list);
+  return wrap;
+}
+
+/** @param {any} tab */
+function renderTaskTab(tab) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'task-tab';
+  btn.dataset.tabId = String(tab.tabId);
+  btn.dataset.windowId = String(tab.windowId);
+
+  const badge = document.createElement('span');
+  badge.className = 'win-badge';
+  badge.textContent = tab.windowBadge || '窗口';
+
+  const meta = document.createElement('span');
+  meta.className = 'meta';
+  const title = document.createElement('span');
+  title.className = 'title';
+  title.textContent = tab.title || tab.url || '';
+  const url = document.createElement('span');
+  url.className = 'url';
+  url.textContent = tab.url || '';
+  meta.append(title, url);
+
+  btn.append(badge, meta);
+  return btn;
+}
+
+/** @param {any} edges */
+function edgeSummary(edges) {
+  if (!edges) return '任务导航图';
+  const parts = [];
+  if (edges.opener) parts.push(`来源×${edges.opener}`);
+  if (edges.referrer) parts.push(`引用×${edges.referrer}`);
+  if (edges.time) parts.push(`时间×${edges.time}`);
+  if (edges.learned) parts.push(`学习×${edges.learned}`);
+  if (edges.feedback) parts.push(`反馈×${edges.feedback}`);
+  return parts.length ? parts.join(' · ') : '独立任务';
+}
+
+/** @param {MouseEvent} ev */
+function onTaskClustersClick(ev) {
+  const tabBtn = ev.target.closest('.task-tab');
+  if (tabBtn) {
+    const tabId = Number(tabBtn.dataset.tabId);
+    const windowId = Number(tabBtn.dataset.windowId);
+    void send(MSG.ACTIVATE_SEARCH_RESULT, { kind: 'open', tabId, windowId });
+    return;
+  }
+  const actionBtn = ev.target.closest('[data-action]');
+  if (!actionBtn) return;
+  const index = Number(actionBtn.dataset.index);
+  const action = actionBtn.dataset.action;
+  if (action === 'merge-prev' && index > 0) {
+    void sendFeedback('merge', viewClusters[index - 1], viewClusters[index]);
+  } else if (action === 'split') {
+    void sendFeedback('split', viewClusters[index], null);
+  }
+}
+
+/**
+ * @param {'merge'|'split'} action
+ * @param {any} a
+ * @param {any} b
+ */
+async function sendFeedback(action, a, b) {
+  const tabsA = a?.tabs || [];
+  const tabsB = b?.tabs || [];
+  const tabIds = [...tabsA, ...tabsB].map((t) => t.tabId);
+  actionResult.textContent = action === 'merge' ? '正在合并任务…' : '正在拆分任务…';
+  try {
+    const res = await send(MSG.TASK_FEEDBACK, {
+      action,
+      tabIds,
+      urlsA: tabsA.map((t) => t.url),
+      urlsB: tabsB.map((t) => t.url),
+      allWindows: allWindowsView,
+    });
+    renderTaskView(res);
+    actionResult.textContent =
+      action === 'merge'
+        ? '已合并：会加强这两类导航的学习权重。'
+        : '已拆分：本次会话不再把这些标签并成同一任务。';
+  } catch (err) {
+    actionResult.textContent = err instanceof Error ? err.message : String(err);
+  }
+}
+
 async function onGroupNow() {
   btnGroupNow.disabled = true;
-  actionResult.textContent = '正在按正文主题分组…';
+  actionResult.textContent = allWindowsView ? '正在按任务导航图整理全部窗口…' : '正在按任务导航图整理当前窗口…';
   try {
-    const res = await send(MSG.GROUP_CURRENT_WINDOW);
+    const res = await send(MSG.GROUP_TABS, { allWindows: allWindowsView });
     if (!res?.ok) {
-      actionResult.textContent = `分组失败：${res?.error || '未知错误'}`;
+      actionResult.textContent = `整理失败：${res?.error || '未知错误'}`;
       return;
     }
     const src = res.sources
@@ -365,7 +562,8 @@ async function onGroupNow() {
           .map(([k, v]) => `${sourceZh(k)}×${v}`)
           .join('，')
       : '';
-    actionResult.textContent = `已分组 ${res.grouped || 0} 个标签页（${(res.labels || []).join('、') || '无'}）${src ? '；来源：' + src : ''}`;
+    actionResult.textContent = `已整理 ${res.grouped || 0} 个标签 / ${ (res.clusters || []).length } 个任务（${(res.labels || []).join('、') || '无'}）${src ? '；主题来源：' + src : ''}`;
+    await refreshTaskView();
   } catch (err) {
     actionResult.textContent = err instanceof Error ? err.message : String(err);
   } finally {

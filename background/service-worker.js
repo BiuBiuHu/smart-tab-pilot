@@ -1,16 +1,20 @@
 /**
  * Smart Tab Pilot — MV3 service worker.
- * Exact-URL dedupe + semantic grouping + quick search + side panel messaging.
+ * Exact-URL dedupe (cross-window) + 任务导航图 grouping + side panel messaging.
  */
 import { MSG } from '../shared/constants.js';
 import { getSettings, saveSettings } from '../shared/storage.js';
 import { shouldSkipUrl } from '../shared/url-utils.js';
 import { downloadNano, getNanoStatus } from './classifier.js';
 import { handleExactDedupe } from './dedupe.js';
-import { groupCurrentWindow, scheduleAutoGroup } from './grouping.js';
+import { applyNavHint, getTaskView, groupCurrentWindow, groupTabs, scheduleAutoGroup } from './grouping.js';
+import { applyTaskFeedback, initNavMemory } from './nav-memory.js';
 import { initRecentClosedTracking } from './recent-closed.js';
 import { activateSearchResult, searchTabs } from './search.js';
+import { initTabLineage } from './tab-lineage.js';
 
+initTabLineage();
+initNavMemory();
 initRecentClosedTracking();
 
 /** Open Chrome side panel when the toolbar action (or _execute_action) is clicked. */
@@ -62,8 +66,8 @@ async function safeDedupe(tabId, url, windowId) {
   }
 }
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  handleMessage(message)
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  handleMessage(message, sender)
     .then(sendResponse)
     .catch((err) => {
       sendResponse({ ok: false, error: err instanceof Error ? err.message : String(err) });
@@ -71,8 +75,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   return true;
 });
 
-/** @param {{ type: string, payload?: Record<string, unknown> }} message */
-async function handleMessage(message) {
+/**
+ * @param {{ type: string, payload?: Record<string, unknown> }} message
+ * @param {chrome.runtime.MessageSender} sender
+ */
+async function handleMessage(message, sender) {
   switch (message?.type) {
     case MSG.GET_NANO_STATUS:
       return { ok: true, ...(await getNanoStatus()) };
@@ -89,9 +96,35 @@ async function handleMessage(message) {
     }
 
     case MSG.GROUP_CURRENT_WINDOW: {
-      const current = await chrome.windows.getCurrent();
+      const current = await chrome.windows.getLastFocused();
       if (current?.id == null) return { ok: false, error: 'no-window' };
       return await groupCurrentWindow(current.id);
+    }
+
+    case MSG.GROUP_TABS: {
+      const allWindows = message.payload?.allWindows !== false;
+      return await groupTabs({ allWindows });
+    }
+
+    case MSG.GET_TASK_VIEW: {
+      const allWindows = message.payload?.allWindows !== false;
+      return await getTaskView({ allWindows });
+    }
+
+    case MSG.TASK_FEEDBACK: {
+      const payload = message.payload || {};
+      const action = payload.action === 'split' ? 'split' : 'merge';
+      const tabIds = Array.isArray(payload.tabIds) ? payload.tabIds : [];
+      const urlsA = Array.isArray(payload.urlsA) ? payload.urlsA : [];
+      const urlsB = Array.isArray(payload.urlsB) ? payload.urlsB : [];
+      await applyTaskFeedback({ action, tabIds, urlsA, urlsB });
+      const allWindows = payload.allWindows !== false;
+      return await getTaskView({ allWindows });
+    }
+
+    case MSG.TAB_NAV_HINT: {
+      applyNavHint(sender?.tab?.id, message.payload || {});
+      return { ok: true };
     }
 
     case MSG.SEARCH_TABS: {

@@ -6,6 +6,7 @@
 |------|------|----------|----------|------|
 | v0.1 | 2026-11-03 | MV3 扩展架构、模型阶梯、抽取边界 | 对齐现有 scaffold 与 MVP PRD | awaiting-user-review |
 | v0.2 | 2026-11-03 | 禁止域名聚合；label-utils；搜索默认关 | 编码批准 + 产品硬约束 | classifier/heuristic/docs |
+| v0.3 | 2026-11-03 | 任务导航图 + 跨窗口；去重全窗口 | 增量 feature | 详见 `docs/task-graph-cross-window/03-architecture/` |
 
 ## 1. 当前决策
 
@@ -13,10 +14,10 @@
   - Chrome **Manifest V3** 纯前端扩展（ES modules service worker），**无构建步骤**、无自有后端。
   - 编排中心：`background/service-worker.js`。
   - 去重：`background/dedupe.js` + `shared/url-utils.js`。
-  - 分组：`background/grouping.js` + `content/extract.js` + `background/classifier.js`。
+  - 分组：`shared/task-graph.js` + `background/grouping.js` + `content/extract.js` + `background/classifier.js`。
   - 设置：`shared/storage.js` → `chrome.storage.sync`。
   - 模型阶梯：`LanguageModel`（Nano）→ 用户 OpenAI 兼容 `fetch` → 启发式。
-  - **分组键仅为语义 label**：`placeTabsInGroup` 按标签名合并；分类 prompt + `rejectDomainishLabel` 禁止站点/域名作为组名；同域不同主题必须不同组。
+  - **分组键改为任务簇 id**（任务导航图）；主题 label 只用于命名与弱精炼。禁止站点/域名作为组名；同域不同主题必须不同组。
   - 抽取：自研文本 DOM 快照；灵感自 page-agent，**不引入其 npm/源码依赖**。
 - 当前自研边界：去重、抽取、分类编排、tabGroups 写入、弹窗；不自研通用 Agent 框架。
 - 当前实施边界：manual-gated；本轮只交付文档。现有代码为 scaffold，审核后再按 backlog 收敛/补齐。
@@ -85,7 +86,7 @@ sequenceDiagram
   User->>Chrome: 打开/导航到 URL
   Chrome->>SW: tabs.onUpdated(url|complete)
   SW->>Dedupe: handleExactDedupe(tabId, url, windowId)
-  Dedupe->>Dedupe: normalizeUrl + query 同窗口
+  Dedupe->>Dedupe: normalizeUrl + query 全部窗口
   alt 命中已有标签
     Dedupe->>Chrome: tabs.update(existing, active)
     Dedupe->>Chrome: windows.update(focused)
@@ -134,6 +135,7 @@ sequenceDiagram
 | `ignoreHash` | boolean | false | true 时规范化去掉 hash |
 | `autoSemanticGroupEnabled` | boolean | true | 自动分组 |
 | `quickSearchEnabled` | boolean | false | P1 搜索 UI；MVP 默认关 |
+| `allWindowsViewEnabled` | boolean | true | 侧栏任务视图：全部窗口 / 仅当前窗口 |
 | `customBaseUrl` | string | '' | OpenAI 兼容 Base |
 | `customApiKey` | string | '' | Bearer Key |
 | `customModel` | string | gpt-4o-mini | 模型名 |
@@ -157,7 +159,10 @@ sequenceDiagram
 | GET_NANO_STATUS | popup→SW | — | availability, detail |
 | DOWNLOAD_NANO | popup→SW | — | ok, availability |
 | GET_SETTINGS / SAVE_SETTINGS | popup→SW | partial settings | settings |
-| GROUP_CURRENT_WINDOW | popup→SW | — | grouped, labels, sources |
+| GROUP_CURRENT_WINDOW | sidepanel→SW | — | 兼容：整理当前窗口 |
+| GROUP_TABS | sidepanel→SW | allWindows | grouped, labels, clusters |
+| GET_TASK_VIEW | sidepanel→SW | allWindows | 逻辑任务簇 + 窗口徽章 |
+| TASK_FEEDBACK | sidepanel→SW | merge/split | 调整 prior + 会话边 |
 | SEARCH_TABS / ACTIVATE_SEARCH_RESULT | popup→SW | query / target | **P1** |
 | EXTRACT_PAGE | SW→CS | — | title, text, url |
 
