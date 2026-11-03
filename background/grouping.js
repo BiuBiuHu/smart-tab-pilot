@@ -2,11 +2,22 @@
  * Task-aware grouping: 任务导航图 clusters → per-window chrome.tabGroups.
  * Cross-window clusters are logical only; physical groups stay in one windowId.
  */
-import { GROUP_COLORS, LABEL_CACHE_KEY, MAX_BODY_CHARS, MSG, TIME_ADJACENCY_MS } from '../shared/constants.js';
+import { withTimeout } from '../shared/async-timeout.js';
+import {
+  CLASSIFY_TIMEOUT_MS,
+  EXTRACT_TIMEOUT_MS,
+  GROUP_COLORS,
+  LABEL_CACHE_KEY,
+  LABEL_REFRESH_BATCH,
+  LABEL_REFRESH_CONCURRENCY,
+  MAX_BODY_CHARS,
+  MSG,
+  TIME_ADJACENCY_MS,
+} from '../shared/constants.js';
+import { heuristicLabel, sanitizeLabel } from '../shared/label-utils.js';
 import { getSettings } from '../shared/storage.js';
 import { buildTaskClusters } from '../shared/task-graph.js';
 import { shouldSkipUrl } from '../shared/url-utils.js';
-import { heuristicLabel, sanitizeLabel } from '../shared/label-utils.js';
 import { classifyPage } from './classifier.js';
 import { loadPriors, loadSessionFeedback } from './nav-memory.js';
 import { attachLineage, hydrateLineage, patchLineage } from './tab-lineage.js';
@@ -49,6 +60,11 @@ export async function hydrateLabelCache() {
  * @returns {Promise<{ title: string, text: string, url: string } | null>}
  */
 export async function extractPageContent(tabId) {
+  return withTimeout(extractPageContentUnbound(tabId), EXTRACT_TIMEOUT_MS, null);
+}
+
+/** @param {number} tabId */
+async function extractPageContentUnbound(tabId) {
   try {
     const res = await chrome.tabs.sendMessage(tabId, { type: MSG.EXTRACT_PAGE });
     if (res?.ok) {
@@ -192,21 +208,42 @@ function pickColor(label) {
   return GROUP_COLORS[labelColorIndex.get(key)];
 }
 
+/** @param {chrome.tabs.Tab} tab */
+function titleHeuristic(tab) {
+  return {
+    label: sanitizeLabel(heuristicLabel(tab.title || '', '', tab.url || '')),
+    source: 'heuristic',
+  };
+}
+
 /**
- * Classify one tab (full extract) and cache the topic label.
+ * Classify one tab (timed extract + timed model). Always fail-soft to title heuristic.
  * @param {chrome.tabs.Tab} tab
  */
 async function classifyAndCache(tab) {
-  const content = await extractPageContent(tab.id);
-  const page = content || {
-    title: tab.title || '',
-    text: '',
-    url: tab.url || '',
-  };
-  const result = await classifyPage(page);
-  labelCache.set(tab.id, result);
-  void persistLabelCache();
-  return result;
+  try {
+    const content = await extractPageContent(tab.id);
+    const page = content || {
+      title: tab.title || '',
+      text: '',
+      url: tab.url || '',
+    };
+    const result = await withTimeout(classifyPage(page), CLASSIFY_TIMEOUT_MS, null);
+    const final = result || {
+      label: sanitizeLabel(heuristicLabel(page.title || '', page.text || '', page.url || '')),
+      source: 'heuristic',
+    };
+    labelCache.set(tab.id, final);
+    void persistLabelCache();
+    return final;
+  } catch {
+    const fallback = titleHeuristic(tab);
+    if (tab.id != null) {
+      labelCache.set(tab.id, fallback);
+      void persistLabelCache();
+    }
+    return fallback;
+  }
 }
 
 /**
@@ -343,6 +380,74 @@ export function scheduleAutoGroup(tabId) {
 }
 
 /**
+ * @param {number} done
+ * @param {number} total
+ */
+function broadcastGroupProgress(done, total) {
+  try {
+    chrome.runtime.sendMessage(
+      { type: MSG.GROUP_PROGRESS, payload: { done, total } },
+      () => void chrome.runtime.lastError,
+    );
+  } catch {
+    /* no listener */
+  }
+}
+
+/**
+ * Timed extract + title/body heuristic for a small uncached batch.
+ * Skips discarded / restricted pages. Does not call Nano on the batch path.
+ * @param {chrome.tabs.Tab[]} tabs
+ * @param {import('../shared/task-graph.js').TaskNode[]} nodes
+ * @param {{ cap: number, concurrency: number, onProgress?: (done: number, total: number) => void }} opts
+ */
+async function refreshUncachedLabels(tabs, nodes, opts) {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const candidates = (tabs || []).filter((t) => {
+    if (t.id == null || shouldSkipUrl(t.url)) return false;
+    if (t.discarded) return false;
+    return !labelCache.has(t.id);
+  }).slice(0, opts.cap);
+
+  const total = candidates.length;
+  if (!total) return;
+  opts.onProgress?.(0, total);
+
+  let cursor = 0;
+  let done = 0;
+  const worker = async () => {
+    while (cursor < candidates.length) {
+      const tab = candidates[cursor];
+      cursor += 1;
+      try {
+        const content = await extractPageContent(tab.id);
+        const title = content?.title || tab.title || '';
+        const text = content?.text || '';
+        const url = content?.url || tab.url || '';
+        const labeled = {
+          label: sanitizeLabel(heuristicLabel(title, text, url)),
+          source: 'heuristic',
+        };
+        labelCache.set(tab.id, labeled);
+        const node = byId.get(tab.id);
+        if (node) {
+          node.semanticLabel = labeled.label;
+          node.source = labeled.source;
+        }
+      } catch {
+        /* keep existing heuristic on the node */
+      }
+      done += 1;
+      opts.onProgress?.(done, total);
+    }
+  };
+
+  const n = Math.min(opts.concurrency, candidates.length);
+  await Promise.all(Array.from({ length: n }, () => worker()));
+  void persistLabelCache();
+}
+
+/**
  * @param {{ allWindows?: boolean, windowId?: number, applyPhysical?: boolean }} [opts]
  */
 export async function groupTabs(opts = {}) {
@@ -358,7 +463,14 @@ export async function groupTabs(opts = {}) {
     tabs = await chrome.tabs.query({});
   }
 
-  const nodes = await nodesFromTabs(tabs, { fullExtract: true });
+  // Clustering is task-graph primary: cache / title heuristic first.
+  // Only a small uncached batch gets a timed extract (never hang on sendMessage).
+  const nodes = await nodesFromTabs(tabs, { fullExtract: false });
+  await refreshUncachedLabels(tabs, nodes, {
+    cap: LABEL_REFRESH_BATCH,
+    concurrency: LABEL_REFRESH_CONCURRENCY,
+    onProgress: broadcastGroupProgress,
+  });
   const clusters = await clusterNodes(nodes);
   if (applyPhysical) {
     await applyPhysicalGroups(clusters, nodes);

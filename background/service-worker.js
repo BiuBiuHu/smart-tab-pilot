@@ -137,6 +137,9 @@ async function handleMessage(message, sender) {
       return await activateSearchResult(message.payload || {});
     }
 
+    case MSG.GROUP_PROGRESS:
+      return { ok: true };
+
     default:
       return { ok: false, error: 'unknown-message' };
   }

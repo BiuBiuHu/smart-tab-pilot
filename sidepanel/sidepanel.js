@@ -1,7 +1,8 @@
 /**
  * Side panel UI — 任务导航图视图 + 中文开关；快速搜索默认关闭。
  */
-import { MSG } from '../shared/constants.js';
+import { withDeadline } from '../shared/async-timeout.js';
+import { GROUP_RPC_TIMEOUT_MS, MSG } from '../shared/constants.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -109,8 +110,17 @@ function applyQuickSearchVisibility(enabled) {
   if (searchCard) searchCard.hidden = !quickSearchOn;
 }
 
-async function send(type, payload) {
-  return chrome.runtime.sendMessage({ type, payload });
+/**
+ * @param {string} type
+ * @param {Record<string, unknown>} [payload]
+ * @param {number} [timeoutMs]
+ */
+async function send(type, payload, timeoutMs = GROUP_RPC_TIMEOUT_MS) {
+  return withDeadline(
+    chrome.runtime.sendMessage({ type, payload }),
+    timeoutMs,
+    '后台响应超时，请重试',
+  );
 }
 
 async function runSearch(query) {
@@ -550,9 +560,21 @@ async function sendFeedback(action, a, b) {
 
 async function onGroupNow() {
   btnGroupNow.disabled = true;
-  actionResult.textContent = allWindowsView ? '正在按任务导航图整理全部窗口…' : '正在按任务导航图整理当前窗口…';
+  actionResult.textContent = allWindowsView
+    ? '正在按任务导航图整理全部窗口…'
+    : '正在按任务导航图整理当前窗口…';
+
+  const onProgress = (message) => {
+    if (message?.type !== MSG.GROUP_PROGRESS) return;
+    const done = Number(message.payload?.done) || 0;
+    const total = Number(message.payload?.total) || 0;
+    if (total > 0) actionResult.textContent = `已处理 ${done}/${total}…`;
+  };
+  chrome.runtime.onMessage.addListener(onProgress);
+
+  let groupedOk = false;
   try {
-    const res = await send(MSG.GROUP_TABS, { allWindows: allWindowsView });
+    const res = await send(MSG.GROUP_TABS, { allWindows: allWindowsView }, GROUP_RPC_TIMEOUT_MS);
     if (!res?.ok) {
       actionResult.textContent = `整理失败：${res?.error || '未知错误'}`;
       return;
@@ -563,11 +585,19 @@ async function onGroupNow() {
           .join('，')
       : '';
     actionResult.textContent = `已整理 ${res.grouped || 0} 个标签 / ${ (res.clusters || []).length } 个任务（${(res.labels || []).join('、') || '无'}）${src ? '；主题来源：' + src : ''}`;
-    await refreshTaskView();
+    groupedOk = true;
   } catch (err) {
     actionResult.textContent = err instanceof Error ? err.message : String(err);
   } finally {
+    chrome.runtime.onMessage.removeListener(onProgress);
     btnGroupNow.disabled = false;
+  }
+  if (groupedOk) {
+    try {
+      await refreshTaskView();
+    } catch {
+      /* view refresh must not re-disable the button */
+    }
   }
 }
 

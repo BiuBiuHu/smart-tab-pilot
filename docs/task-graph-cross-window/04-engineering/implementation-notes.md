@@ -55,7 +55,14 @@ Chrome `tabs.Tab` **没有** `createdAt`，时间边只使用本扩展观察到�
 
 后续可以在不改聚类主循环的前提下接入：拖拽并组、负反馈衰减、按窗口的 prior。
 
-## 5. 验证命令
+## 5. 「立即整理」失败软化
+
+- 批量整理**不再**对所有标签串行 `sendMessage` + `classifyPage`。任务簇先用 lineage / 缓存 / 标题启发式。
+- 最多 `LABEL_REFRESH_BATCH`（6）个未缓存页并行抽取（并发 3），单页 `EXTRACT_TIMEOUT_MS`（2s）超时则回退标题启发式。
+- `extractPageContent` / 单标签 `classifyPage` 均 `Promise.race` 超时，受限页或挂死的 content script 不会卡住 SW。
+- 侧栏 `send` 有 `GROUP_RPC_TIMEOUT_MS`（20s）硬超时；`onGroupNow` 的 `finally` 一定恢复按钮。进度文案：`已处理 n/N`。
+
+## 6. 验证命令
 
 ```bash
 npm test
@@ -63,6 +70,6 @@ npm test
 
 覆盖：opener 混主题仍一团、同域不同主题拆开、时间+冲突主题不并、学习边、反馈 merge/split、跨窗 URL 匹配、浅模式拒绝。
 
-## 6. 手工要点
+## 7. 手工要点
 
 见 `05-testing/manual-checklist.md`。本环境无真实 Chrome 扩展宿主，物理 `tabGroups` / 侧栏需 Load unpacked 验收。
