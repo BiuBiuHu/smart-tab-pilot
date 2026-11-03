@@ -61,22 +61,41 @@
           </label>
           <button id="btn-save-custom" class="btn btn-secondary">保存自定义模型</button>
         </section>
+        <section class="settings-block" id="feature-toggles">
+          <div class="card-title">功能开关</div>
+          <div class="scope-toggle" role="radiogroup" aria-label="窗口范围">
+            <label class="scope-option">
+              <input type="radio" name="win-scope" id="scope-all" value="all" checked />
+              <span>全部窗口</span>
+            </label>
+            <label class="scope-option">
+              <input type="radio" name="win-scope" id="scope-current" value="current" />
+              <span>仅当前窗口</span>
+            </label>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="toggle-dedupe" />
+            <span>精确 URL 去重跳转</span>
+          </label>
+          <label class="toggle">
+            <input type="checkbox" id="toggle-ignore-hash" />
+            <span>去重时忽略 hash（默认关闭＝含 hash 精确匹配）</span>
+          </label>
+          <label class="toggle">
+            <input type="checkbox" id="toggle-auto-group" />
+            <span>自动按任务归组（来源/时间优先，语义只作精炼）</span>
+          </label>
+          <label class="toggle">
+            <input type="checkbox" id="toggle-quick-search" />
+            <span>启用快速搜索（P1，默认关闭）</span>
+          </label>
+        </section>
         <p id="fallback-hint" class="hint"></p>
       </div>
     </header>
 
     <section class="card" id="task-view-card">
       <div class="card-title">任务视图</div>
-      <div class="scope-toggle" role="radiogroup" aria-label="窗口范围">
-        <label class="scope-option">
-          <input type="radio" name="win-scope" id="scope-all" value="all" checked />
-          <span>全部窗口</span>
-        </label>
-        <label class="scope-option">
-          <input type="radio" name="win-scope" id="scope-current" value="current" />
-          <span>仅当前窗口</span>
-        </label>
-      </div>
       <div class="task-toolbar">
         <button id="btn-refresh-tasks" class="btn btn-secondary btn-inline" type="button">刷新</button>
         <button id="btn-group-now" class="btn btn-primary btn-inline" type="button">立即整理任务</button>
@@ -108,26 +127,6 @@
       </div>
       <div id="search-results" class="search-results" role="listbox" aria-label="搜索结果"></div>
       <p id="search-empty" class="hint search-empty" hidden>无匹配结果</p>
-    </section>
-
-    <section class="card">
-      <div class="card-title">功能开关</div>
-      <label class="toggle">
-        <input type="checkbox" id="toggle-dedupe" />
-        <span>精确 URL 去重跳转</span>
-      </label>
-      <label class="toggle">
-        <input type="checkbox" id="toggle-ignore-hash" />
-        <span>去重时忽略 hash（默认关闭＝含 hash 精确匹配）</span>
-      </label>
-      <label class="toggle">
-        <input type="checkbox" id="toggle-auto-group" />
-        <span>自动按任务归组（来源/时间优先，语义只作精炼）</span>
-      </label>
-      <label class="toggle">
-        <input type="checkbox" id="toggle-quick-search" />
-        <span>启用快速搜索（P1，默认关闭）</span>
-      </label>
     </section>
 
     <footer class="footer"></footer>

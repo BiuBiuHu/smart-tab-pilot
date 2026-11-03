@@ -393,16 +393,18 @@ function updateFallbackHint(avail) {
 async function onDownloadNano() {
   btnDownload.disabled = true;
   btnDownload.textContent = '正在请求下载…';
-  actionResult.textContent = '';
+  if (nanoDetailEl) nanoDetailEl.textContent = '正在请求下载…';
   try {
     const res = await send(MSG.DOWNLOAD_NANO);
-    if (!res?.ok) {
-      actionResult.textContent = `下载失败：${res?.error || '未知错误'}`;
-    } else {
-      actionResult.textContent = '已触发 Nano 下载 / 会话创建。';
+    if (nanoDetailEl) {
+      nanoDetailEl.textContent = res?.ok
+        ? '已触发 Nano 下载 / 会话创建。'
+        : `下载失败：${res?.error || '未知错误'}`;
     }
   } catch (err) {
-    actionResult.textContent = err instanceof Error ? err.message : String(err);
+    if (nanoDetailEl) {
+      nanoDetailEl.textContent = err instanceof Error ? err.message : String(err);
+    }
   } finally {
     btnDownload.textContent = '下载 / 启用 Nano 模型';
     await refreshNano();
@@ -439,8 +441,8 @@ async function onSaveCustom() {
       customApiKey: customApiKey.value.trim(),
       customModel: customModel.value.trim() || 'gpt-4o-mini',
     });
-    actionResult.textContent = '自定义模型已保存。';
     await refreshNano();
+    if (fallbackHint) fallbackHint.textContent = '自定义模型已保存。';
   } finally {
     btnSaveCustom.disabled = false;
   }

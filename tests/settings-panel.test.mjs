@@ -45,7 +45,7 @@ describe('settings panel state', () => {
   });
 });
 
-describe('sidepanel HTML: model fields only inside settings', () => {
+describe('sidepanel HTML: model fields and feature toggles only inside settings', () => {
   it('places a 设置 control at the header and hides the panel by default', () => {
     assert.match(html, /id="btn-settings"/);
     assert.match(html, /aria-label="设置"/);
@@ -58,13 +58,21 @@ describe('sidepanel HTML: model fields only inside settings', () => {
     assert.ok(headerIdx >= 0 && btnIdx > headerIdx && btnIdx < taskIdx);
   });
 
-  it('moves Nano + custom model off the main body into #settings-panel', () => {
+  it('moves Nano, custom model, 功能开关, and window scope off the main body', () => {
     const start = html.indexOf('id="settings-panel"');
     const end = html.indexOf('id="task-view-card"');
     assert.ok(start > 0 && end > start);
     const inside = html.slice(start, end);
     const outsideBefore = html.slice(0, start);
     const outsideAfter = html.slice(end);
+    assert.match(inside, /id="feature-toggles"/);
+    assert.match(inside, /功能开关/);
+    assert.match(inside, /id="scope-all"/);
+    assert.match(inside, /id="scope-current"/);
+    assert.match(inside, /id="toggle-dedupe"/);
+    assert.match(inside, /id="toggle-ignore-hash"/);
+    assert.match(inside, /id="toggle-auto-group"/);
+    assert.match(inside, /id="toggle-quick-search"/);
     assert.match(inside, /id="nano-section"/);
     assert.match(inside, /id="custom-base-url"/);
     assert.match(inside, /id="custom-api-key"/);
@@ -74,5 +82,14 @@ describe('sidepanel HTML: model fields only inside settings', () => {
     assert.doesNotMatch(outsideBefore, /id="custom-base-url"/);
     assert.doesNotMatch(outsideAfter, /id="nano-section"/);
     assert.doesNotMatch(outsideAfter, /id="custom-base-url"/);
+    assert.doesNotMatch(outsideAfter, /id="toggle-dedupe"/);
+    assert.doesNotMatch(outsideAfter, /id="scope-all"/);
+    assert.doesNotMatch(outsideAfter, /功能开关/);
+    assert.doesNotMatch(outsideAfter, /Gemini Nano/);
+    assert.doesNotMatch(outsideAfter, /Prompt API/);
+    assert.doesNotMatch(outsideAfter, /id="nano-status"/);
+    assert.doesNotMatch(outsideAfter, /id="btn-download-nano"/);
+    assert.match(outsideAfter, /id="btn-group-now"/);
+    assert.match(outsideAfter, /id="btn-refresh-tasks"/);
   });
 });
