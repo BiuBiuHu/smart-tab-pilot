@@ -343,10 +343,17 @@ async function maybeApplyModelJudge(clusters, nodes, buildOpts) {
   if (!clusters || clusters.length < 2) return clusters;
   try {
     const summariesByTab = new Map(nodes.map((n) => [n.id, n.summary]));
-    const payload = buildJudgePayload(clusters, summariesByTab);
-    if (!payload.candidates.length) return clusters;
-    const wanted = new Set(payload.candidates.flatMap((p) => [p.a, p.b]));
-    payload.clusters = payload.clusters.filter((c) => wanted.has(c.id));
+    const nodesById = new Map(nodes.map((n) => [n.id, n]));
+    const payload = buildJudgePayload(clusters, summariesByTab, nodesById);
+    if (payload.clusters.length < 2) return clusters;
+    if (payload.clusters.length > 18) {
+      const wanted = new Set(payload.candidates.flatMap((p) => [p.a, p.b]));
+      const rest = payload.clusters.filter((c) => !wanted.has(c.id));
+      payload.clusters = [
+        ...payload.clusters.filter((c) => wanted.has(c.id)),
+        ...rest,
+      ].slice(0, 18);
+    }
     const judgment = await withTimeout(
       tryModelSameGroupJudge(payload),
       MODEL_JUDGE_TIMEOUT_MS,
@@ -642,6 +649,7 @@ export async function getTaskView(opts = {}) {
             url: t.url || n.url || '',
             favIconUrl: t.favIconUrl || '',
             topic: n.semanticLabel || '',
+            excerpt: n.summary?.excerpt || '',
           };
         })
         .filter(Boolean);
@@ -669,6 +677,22 @@ export async function getTaskView(opts = {}) {
  * @param {number | undefined} tabId
  * @param {{ url?: string, referrer?: string }} hint
  */
+/**
+ * Re-apply physical groups after user merge/split (no re-extract).
+ * @param {{ allWindows?: boolean, windowId?: number }} [opts]
+ */
+export async function applyPhysicalFromCurrentGraph(opts = {}) {
+  let tabs;
+  if (opts.allWindows === false && opts.windowId != null) {
+    tabs = await chrome.tabs.query({ windowId: opts.windowId });
+  } else {
+    tabs = await chrome.tabs.query({});
+  }
+  const nodes = await nodesFromTabs(tabs, { fullExtract: false });
+  const clusters = await clusterNodes(nodes, { useModelJudge: false });
+  await applyPhysicalGroups(clusters, nodes);
+}
+
 export function applyNavHint(tabId, hint) {
   if (tabId == null) return;
   const patch = {};

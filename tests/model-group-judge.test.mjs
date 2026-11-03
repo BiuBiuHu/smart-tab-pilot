@@ -7,7 +7,9 @@ import {
   applyModelJudgment,
   buildJudgePayload,
   formatJudgeUserPrompt,
+  lexicalHintTokens,
   parseJudgeResponse,
+  proposeCandidatePairs,
 } from '../shared/model-group-judge.js';
 import { buildTabSummary } from '../shared/tab-summary.js';
 import { buildTaskClusters } from '../shared/task-graph.js';
@@ -66,10 +68,12 @@ describe('buildJudgePayload / applyModelJudgment', () => {
     );
     const raw = JSON.stringify(payload);
     assert.ok(!raw.includes('BODY'.repeat(80)));
-    assert.ok((payload.clusters[0].summaries[0].excerpt || '').length <= 280);
+    assert.ok((payload.clusters[0].summaries[0].intro || '').length <= 280);
     const prompt = formatJudgeUserPrompt(payload);
     assert.match(prompt, /tab 1/);
-    assert.ok(prompt.length < 2000);
+    assert.match(prompt, /title:/);
+    assert.match(prompt, /url:/);
+    assert.ok(prompt.length < 4000);
   });
 
   it('applies model merges as a second layer without dropping project rules', () => {
@@ -96,6 +100,47 @@ describe('buildJudgePayload / applyModelJudgment', () => {
     );
     assert.equal(next.length, 1);
     assert.ok(next[0].edges.model >= 1);
+  });
+
+  it('hints yuque BETTR docs with Bettr Promotion via title/url/intro, not slug-only', () => {
+    const yuque = 'https://yuque.antfin.com/ot2rzd/tech/bettr-plan';
+    const marmot = 'https://www.marmot-cloud.com/bettr/bettr-promotion/it';
+    const nodes = [
+      tab({
+        id: 1,
+        url: yuque,
+        title: 'BETTR信贷智能增长平台一期技术方案',
+        semanticLabel: '批量发奖demo',
+        summary: buildTabSummary({
+          title: 'BETTR信贷智能增长平台一期技术方案',
+          url: yuque,
+          text: 'Bettr Promotion 一期技术方案与权益、活动、发奖。',
+        }),
+      }),
+      tab({
+        id: 2,
+        url: marmot,
+        title: 'bettr-promotion · Marmot',
+        semanticLabel: 'Bettr Promotion',
+        summary: buildTabSummary({
+          title: 'bettr-promotion · Marmot',
+          url: marmot,
+          text: '营销活动控制台。',
+        }),
+      }),
+    ];
+    const clusters = buildTaskClusters(nodes);
+    assert.equal(clusters.length, 2);
+    const summaries = new Map(nodes.map((n) => [n.id, n.summary]));
+    const nodesById = new Map(nodes.map((n) => [n.id, n]));
+    const payload = buildJudgePayload(clusters, summaries, nodesById);
+    const prompt = formatJudgeUserPrompt(payload);
+    assert.match(prompt, /yuque\.antfin\.com/);
+    assert.match(prompt, /BETTR信贷智能增长平台/);
+    assert.match(prompt, /title:/);
+    assert.ok(lexicalHintTokens('BETTR信贷 技术方案').some((t) => t.includes('bettr') || t.includes('信贷')));
+    const hinted = proposeCandidatePairs(clusters, summaries, nodesById);
+    assert.ok(hinted.length >= 1);
   });
 
   it('honors session split over model merge', () => {

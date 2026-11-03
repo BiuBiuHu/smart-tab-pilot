@@ -4,7 +4,21 @@
  * decides. Regex is never a merge authority.
  */
 import { slugsRelated } from './project-affinity.js';
-import { formatSummaryLine } from './tab-summary.js';
+
+const HINT_STOP = new Set([
+  'http', 'https', 'html', 'index', 'page', 'pages', 'www', 'com', 'net', 'org',
+  'demo', 'console', 'login', 'home', 'main', 'docs', 'doc', 'wiki',
+]);
+
+/**
+ * Cheap lexical hints from title+url+intro (not a merge decision).
+ * @param {string} text
+ */
+export function lexicalHintTokens(text) {
+  const raw = (text || '').toLowerCase();
+  const parts = raw.match(/[a-z][a-z0-9]{3,}|[\u4e00-\u9fff]{2,}/g) || [];
+  return [...new Set(parts.filter((p) => !HINT_STOP.has(p)))];
+}
 
 /**
  * @typedef {{ merges: [number, number][] }} ModelJudgment
@@ -30,7 +44,17 @@ export function clusterProductKeys(cluster, summariesByTab) {
  * @param {Map<number, import('./tab-summary.js').TabSummary | null | undefined>} summariesByTab
  * @returns {{ a: string, b: string, productKey: string }[]}
  */
-export function proposeCandidatePairs(clusters, summariesByTab) {
+function clusterHintBlob(cluster, summariesByTab, nodesById) {
+  const bits = [];
+  for (const id of cluster?.tabIds || []) {
+    const s = summariesByTab?.get(id);
+    const n = nodesById?.get(id);
+    bits.push(s?.title || n?.title || '', s?.url || n?.url || '', s?.excerpt || '');
+  }
+  return bits.join(' ');
+}
+
+export function proposeCandidatePairs(clusters, summariesByTab, nodesById) {
   const list = clusters || [];
   /** @type {{ a: string, b: string, productKey: string }[]} */
   const pairs = [];
@@ -48,13 +72,23 @@ export function proposeCandidatePairs(clusters, summariesByTab) {
         }
         if (hit) break;
       }
+      if (!hit) {
+        const ta = new Set(lexicalHintTokens(clusterHintBlob(list[i], summariesByTab, nodesById)));
+        const tb = lexicalHintTokens(clusterHintBlob(list[j], summariesByTab, nodesById));
+        hit = tb.find((t) => ta.has(t)) || '';
+      }
       if (hit) pairs.push({ a: list[i].id, b: list[j].id, productKey: hit });
     }
   }
   return pairs;
 }
 
-export function buildJudgePayload(clusters, summariesByTab) {
+/**
+ * @param {import('./task-graph.js').TaskCluster[]} clusters
+ * @param {Map<number, import('./tab-summary.js').TabSummary | null | undefined>} summariesByTab
+ * @param {Map<number, import('./task-graph.js').TaskNode> | undefined} nodesById
+ */
+export function buildJudgePayload(clusters, summariesByTab, nodesById) {
   const items = (clusters || []).map((c) => ({
     id: c.id,
     label: c.label,
@@ -63,21 +97,30 @@ export function buildJudgePayload(clusters, summariesByTab) {
     summaries: c.tabIds
       .map((id) => {
         const s = summariesByTab?.get(id);
-        if (!s) return null;
+        const n = nodesById?.get(id);
+        const title = s?.title || n?.title || '';
+        const url = s?.url || n?.url || '';
+        const intro = s?.excerpt || '';
+        if (!title && !url && !intro) return null;
+        const nav = [];
+        if (n?.referrerUrl) nav.push(`referrer ${n.referrerUrl}`);
+        if (n?.openerTabId != null) nav.push(`openerTab ${n.openerTabId}`);
         return {
           tabId: id,
-          title: s.title || '',
-          pathKey: s.pathKey || '',
-          slugs: (s.slugs || []).slice(0, 4),
-          productKeys: (s.productKeys || []).slice(0, 4),
-          excerpt: s.excerpt || '',
+          title,
+          url,
+          intro,
+          nav: nav.join('; '),
+          pathKey: s?.pathKey || '',
+          slugs: (s?.slugs || []).slice(0, 4),
+          productKeys: (s?.productKeys || []).slice(0, 4),
         };
       })
       .filter(Boolean),
   }));
   return {
     clusters: items,
-    candidates: proposeCandidatePairs(clusters, summariesByTab),
+    candidates: proposeCandidatePairs(clusters, summariesByTab, nodesById),
   };
 }
 
@@ -137,8 +180,7 @@ export function applyModelJudgment(nodes, clusters, judgment, buildOpts, build) 
 export function formatJudgeUserPrompt(payload) {
   const lines = [];
   lines.push(
-    'Product keys / slugs are CANDIDATE HINTS only. Decide from the summaries.',
-    'Do not merge just because a key matches. Cross-window is not a reason to split.',
+    'Decide from title + full URL + intro. Slugs are hints only. Cross-window is not a split reason.',
   );
   if (payload.candidates?.length) {
     lines.push('Candidate cluster pairs (not a decision):');
@@ -150,17 +192,11 @@ export function formatJudgeUserPrompt(payload) {
     const keys = (c.productKeys || []).join(',') || '-';
     lines.push(`cluster ${c.id} (${c.label}) productKeys=${keys}:`);
     for (const s of c.summaries || []) {
-      lines.push(
-        `  tab ${s.tabId}: ${formatSummaryLine({
-          title: s.title,
-          url: '',
-          pathKey: s.pathKey,
-          slugs: s.slugs,
-          productKeys: s.productKeys,
-          excerpt: s.excerpt,
-          extractedAt: 0,
-        })}`,
-      );
+      lines.push(`  tab ${s.tabId}:`);
+      if (s.title) lines.push(`    title: ${s.title}`);
+      if (s.url) lines.push(`    url: ${s.url}`);
+      if (s.intro) lines.push(`    intro: ${s.intro}`);
+      if (s.nav) lines.push(`    nav: ${s.nav}`);
     }
   }
   return lines.join('\n') || 'no summaries';

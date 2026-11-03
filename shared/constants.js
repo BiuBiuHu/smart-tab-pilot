@@ -42,7 +42,7 @@ export const TAB_SUMMARY_TITLE_MAX = 120;
 export const TAB_SUMMARY_STORE_CAP = 200;
 /** In-memory extract used only to distill a summary, then discarded. */
 export const TAB_SUMMARY_SOURCE_CHARS = 800;
-export const MODEL_JUDGE_TIMEOUT_MS = 2500;
+export const MODEL_JUDGE_TIMEOUT_MS = 4000;
 
 /** Per-tab extract / classify must fail-soft so 「立即整理」 cannot hang. */
 export const EXTRACT_TIMEOUT_MS = 2000;
@@ -113,15 +113,15 @@ Rules:
  * Second-layer same-group judge. Input is short tab summaries only — never a full body.
  */
 export const SAME_GROUP_SYSTEM_PROMPT = `You judge whether browser tabs belong to the SAME project/task.
-You only receive short summaries (title, path/product key, optional 1-2 sentences). Never assume a full page body.
-Product keys (e.g. bettr-promotion) and "candidate" pairs are HINTS only — not a merge order. Decide from the summaries.
+Each tab has: page title, full URL, a short intro/summary (1-2 sentences), and optional nav hints (opener/referrer). Never assume a full page body.
+Slug/product keys and "candidate" pairs are HINTS only. Decide from title + URL + intro.
 Reply with ONLY JSON: {"merges":[[tabId,tabId],...]}
 Rules:
-- Merge when summaries describe one product/project even across hosts or windows (Marmot console, marketing console, Unio/alipay page, ac.alipay.com of the same Bettr Promotion).
-- Title should stay the product name (Bettr Promotion). Do not split Unio vs Marketing vs path variants.
-- Different windows are NOT a reason to split. Logical tasks already span windows.
-- Do NOT merge different products on the same site (two GitHub repos, two unrelated tools).
-- Do NOT merge just because hostnames or a slug hint match if summaries are clearly different products.
+- Merge when the fields show one product/project even across hosts, windows, or doc vs console (e.g. Yuque/语雀 BETTR PRD or 技术方案 + Bettr Promotion Marmot/Unio/marketing/alipay pages).
+- If the user is clearly doing two jobs (unrelated docs vs an unrelated runtime, or two products), keep them separate.
+- Do not split Unio vs Marketing vs path variants of the same product. Cross-window is not a reason to split.
+- Do NOT merge just because hostnames match (two GitHub repos stay split).
+- Prefer accuracy over recall when intro/title conflict; if still clearly the same BETTR promotion work, merge.
 - If unsure, return {"merges":[]}.
 - No markdown, no explanation.`;
 

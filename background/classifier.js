@@ -214,7 +214,7 @@ async function tryCustomJudge(user) {
       body: JSON.stringify({
         model,
         temperature: 0.1,
-        max_tokens: 256,
+        max_tokens: 512,
         messages: [
           { role: 'system', content: SAME_GROUP_SYSTEM_PROMPT },
           { role: 'user', content: user },

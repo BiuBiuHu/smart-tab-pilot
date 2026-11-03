@@ -3,6 +3,7 @@
  */
 import { withDeadline } from '../shared/async-timeout.js';
 import { GROUP_RPC_TIMEOUT_MS, MSG, REFINE_STALL_MS } from '../shared/constants.js';
+import { planDragMerge } from '../shared/drag-merge.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -88,6 +89,11 @@ function bind() {
   scopeAll.addEventListener('change', onScopeChange);
   scopeCurrent.addEventListener('change', onScopeChange);
   taskClustersEl.addEventListener('click', onTaskClustersClick);
+  taskClustersEl.addEventListener('dragstart', onTaskDragStart);
+  taskClustersEl.addEventListener('dragend', onTaskDragEnd);
+  taskClustersEl.addEventListener('dragover', onTaskDragOver);
+  taskClustersEl.addEventListener('dragleave', onTaskDragLeave);
+  taskClustersEl.addEventListener('drop', onTaskDrop);
 
   let viewTimer = 0;
   const scheduleViewRefresh = () => {
@@ -432,6 +438,7 @@ function renderCluster(cluster, index) {
   const wrap = document.createElement('div');
   wrap.className = 'task-cluster';
   wrap.dataset.clusterId = cluster.id;
+  wrap.draggable = true;
 
   const head = document.createElement('div');
   head.className = 'task-cluster-head';
@@ -455,6 +462,10 @@ function renderCluster(cluster, index) {
     mergeBtn.textContent = '与上一任务合并';
     actions.appendChild(mergeBtn);
   }
+  const dragHint = document.createElement('span');
+  dragHint.className = 'drag-hint';
+  dragHint.textContent = '拖到另一任务上合并';
+  actions.appendChild(dragHint);
   if (cluster.tabs.length > 1) {
     const splitBtn = document.createElement('button');
     splitBtn.type = 'button';
@@ -482,6 +493,7 @@ function renderTaskTab(tab) {
   btn.className = 'task-tab';
   btn.dataset.tabId = String(tab.tabId);
   btn.dataset.windowId = String(tab.windowId);
+  btn.draggable = true;
 
   const badge = document.createElement('span');
   badge.className = 'win-badge';
@@ -515,8 +527,76 @@ function edgeSummary(edges) {
   return parts.length ? parts.join(' · ') : '独立任务';
 }
 
+let suppressTabClick = false;
+
+/** @param {DragEvent} ev */
+function onTaskDragStart(ev) {
+  if (ev.target.closest?.('[data-action], button.btn-text')) {
+    ev.preventDefault();
+    return;
+  }
+  const tabBtn = ev.target.closest?.('.task-tab');
+  const cluster = ev.target.closest?.('.task-cluster');
+  if (!cluster) return;
+  const payload = tabBtn
+    ? { kind: 'tab', clusterId: cluster.dataset.clusterId, tabId: Number(tabBtn.dataset.tabId) }
+    : { kind: 'cluster', clusterId: cluster.dataset.clusterId };
+  ev.dataTransfer.effectAllowed = 'link';
+  ev.dataTransfer.setData('application/json', JSON.stringify(payload));
+  ev.dataTransfer.setData('text/plain', JSON.stringify(payload));
+  cluster.classList.add('is-dragging');
+  suppressTabClick = Boolean(tabBtn);
+}
+
+/** @param {DragEvent} ev */
+function onTaskDragEnd(ev) {
+  ev.target.closest?.('.task-cluster')?.classList.remove('is-dragging');
+  taskClustersEl.querySelectorAll('.drag-over').forEach((el) => el.classList.remove('drag-over'));
+}
+
+/** @param {DragEvent} ev */
+function onTaskDragOver(ev) {
+  const cluster = ev.target.closest?.('.task-cluster');
+  if (!cluster) return;
+  ev.preventDefault();
+  ev.dataTransfer.dropEffect = 'link';
+  cluster.classList.add('drag-over');
+}
+
+/** @param {DragEvent} ev */
+function onTaskDragLeave(ev) {
+  const cluster = ev.target.closest?.('.task-cluster');
+  if (!cluster) return;
+  if (cluster.contains(ev.relatedTarget)) return;
+  cluster.classList.remove('drag-over');
+}
+
+/** @param {DragEvent} ev */
+function onTaskDrop(ev) {
+  const cluster = ev.target.closest?.('.task-cluster');
+  if (!cluster) return;
+  ev.preventDefault();
+  cluster.classList.remove('drag-over');
+  let source;
+  try {
+    source = JSON.parse(ev.dataTransfer.getData('application/json') || ev.dataTransfer.getData('text/plain') || '{}');
+  } catch {
+    return;
+  }
+  const plan = planDragMerge(source, { clusterId: cluster.dataset.clusterId }, viewClusters);
+  if (!plan) return;
+  void sendMergePlan(plan);
+}
+
 /** @param {MouseEvent} ev */
 function onTaskClustersClick(ev) {
+  if (suppressTabClick) {
+    suppressTabClick = false;
+    if (ev.target.closest?.('.task-tab')) {
+      ev.preventDefault();
+      return;
+    }
+  }
   const tabBtn = ev.target.closest('.task-tab');
   if (tabBtn) {
     const tabId = Number(tabBtn.dataset.tabId);
@@ -540,17 +620,36 @@ function onTaskClustersClick(ev) {
  * @param {any} a
  * @param {any} b
  */
+async function sendMergePlan(plan) {
+  return sendFeedbackPayload('merge', plan.tabIds, plan.urlsA, plan.urlsB);
+}
+
 async function sendFeedback(action, a, b) {
   const tabsA = a?.tabs || [];
   const tabsB = b?.tabs || [];
   const tabIds = [...tabsA, ...tabsB].map((t) => t.tabId);
+  return sendFeedbackPayload(
+    action,
+    tabIds,
+    tabsA.map((t) => t.url),
+    tabsB.map((t) => t.url),
+  );
+}
+
+/**
+ * @param {'merge'|'split'} action
+ * @param {number[]} tabIds
+ * @param {string[]} urlsA
+ * @param {string[]} urlsB
+ */
+async function sendFeedbackPayload(action, tabIds, urlsA, urlsB) {
   actionResult.textContent = action === 'merge' ? '正在合并任务…' : '正在拆分任务…';
   try {
     const res = await send(MSG.TASK_FEEDBACK, {
       action,
       tabIds,
-      urlsA: tabsA.map((t) => t.url),
-      urlsB: tabsB.map((t) => t.url),
+      urlsA,
+      urlsB,
       allWindows: allWindowsView,
     });
     renderTaskView(res);

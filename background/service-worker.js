@@ -7,7 +7,14 @@ import { getSettings, saveSettings } from '../shared/storage.js';
 import { shouldSkipUrl } from '../shared/url-utils.js';
 import { downloadNano, getNanoStatus } from './classifier.js';
 import { handleExactDedupe } from './dedupe.js';
-import { applyNavHint, getTaskView, groupCurrentWindow, groupTabs, scheduleAutoGroup } from './grouping.js';
+import {
+  applyNavHint,
+  applyPhysicalFromCurrentGraph,
+  getTaskView,
+  groupCurrentWindow,
+  groupTabs,
+  scheduleAutoGroup,
+} from './grouping.js';
 import { applyTaskFeedback, initNavMemory } from './nav-memory.js';
 import { initRecentClosedTracking } from './recent-closed.js';
 import { activateSearchResult, searchTabs } from './search.js';
@@ -121,6 +128,11 @@ async function handleMessage(message, sender) {
       const urlsB = Array.isArray(payload.urlsB) ? payload.urlsB : [];
       await applyTaskFeedback({ action, tabIds, urlsA, urlsB });
       const allWindows = payload.allWindows !== false;
+      try {
+        await applyPhysicalFromCurrentGraph({ allWindows });
+      } catch (err) {
+        console.warn('[SmartTabPilot] physical relayout after feedback failed', err);
+      }
       return await getTaskView({ allWindows });
     }
 

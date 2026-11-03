@@ -372,6 +372,16 @@ body {
   border-radius: 10px;
   padding: 10px;
   background: #0f172a;
+  cursor: grab;
+}
+
+.task-cluster.is-dragging {
+  opacity: 0.55;
+}
+
+.task-cluster.drag-over {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 .task-cluster-head {
@@ -411,6 +421,11 @@ body {
   text-decoration: underline;
 }
 
+.drag-hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+
 .task-tab-list {
   display: flex;
   flex-direction: column;
@@ -430,7 +445,7 @@ body {
   color: inherit;
   font: inherit;
   text-align: left;
-  cursor: pointer;
+  cursor: grab;
 }
 
 .task-tab:hover {
