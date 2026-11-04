@@ -15,9 +15,9 @@ Pure front-end JavaScript — no build step. License: [MIT](./LICENSE).
 
 ## Promo
 
-Watch the ~28s product tour on the [GitHub Pages homepage](https://biubiuhu.github.io/smart-tab-pilot/#promo) (HTML5 player). GitHub’s README cannot play `<video>` inline — click the poster, or open the [hosted file](https://biubiuhu.github.io/smart-tab-pilot/assets/promo.mp4).
+Watch the ~28s product tour on the [GitHub Pages homepage](https://biubiuhu.github.io/smart-tab-pilot/#promo) (HTML5 player). Light tech BGM; press play to hear it (no autoplay). GitHub’s README cannot play `<video>` inline — click the poster, or open the [hosted file](https://biubiuhu.github.io/smart-tab-pilot/assets/promo.mp4).
 
-中文：约 28 秒产品介绍（精确去重 · 任务导航图 · 侧边栏）。商店即将上线，没有 YouTube 镜像。
+中文：约 28 秒产品介绍（精确去重 · 任务导航图 · 侧边栏），含轻科技背景乐。商店即将上线，没有 YouTube 镜像。
 
 <p align="center">
   <a href="https://biubiuhu.github.io/smart-tab-pilot/#promo">
