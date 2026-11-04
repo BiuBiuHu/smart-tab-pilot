@@ -3,18 +3,470 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Smart Tab Pilot</title>
+  <title>Smart Tab Pilot — Precise dedupe &amp; task navigation graph</title>
+  <meta name="description" content="Chrome MV3 side-panel extension: exact URL dedupe with cross-window jump, plus a task navigation graph. Nano → custom OpenAI-compatible → heuristic. MIT." />
+  <meta name="theme-color" content="#020807" />
+  <link rel="icon" type="image/png" href="assets/favicon.png" />
+  <link rel="apple-touch-icon" href="assets/icon.png" />
+  <meta property="og:title" content="Smart Tab Pilot" />
+  <meta property="og:description" content="Exact URL dedupe (cross-window) + task navigation graph. Chrome side panel. MIT." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://biubiuhu.github.io/smart-tab-pilot/" />
+  <meta property="og:image" content="https://biubiuhu.github.io/smart-tab-pilot/assets/hero.png" />
   <style>
-    body { font: 16px/1.5 system-ui, sans-serif; max-width: 40rem; margin: 3rem auto; padding: 0 1rem; }
-    a { color: #0f766e; }
+    :root {
+      color-scheme: dark;
+      --bg: #020807;
+      --bg-elev: #0b1413;
+      --card: #0f1c1a;
+      --text: #e7f4f1;
+      --muted: #8aa8a3;
+      --line: rgba(45, 212, 191, 0.16);
+      --accent: #2dd4bf;
+      --accent-dim: #14b8a6;
+      --accent-ink: #04201c;
+      --glow: rgba(45, 212, 191, 0.22);
+      --radius: 18px;
+      --max: 68rem;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        color-scheme: light;
+        --bg: #f4faf8;
+        --bg-elev: #ffffff;
+        --card: #ffffff;
+        --text: #0c1f1c;
+        --muted: #4b6661;
+        --line: rgba(15, 118, 110, 0.16);
+        --accent: #0f766e;
+        --accent-dim: #0d9488;
+        --accent-ink: #f0fdfa;
+        --glow: rgba(15, 118, 110, 0.12);
+      }
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after {
+        animation: none !important;
+        transition: none !important;
+      }
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font: 16px/1.6 "Segoe UI", system-ui, -apple-system, "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+      background:
+        radial-gradient(900px 520px at 50% -10%, var(--glow), transparent 60%),
+        radial-gradient(700px 400px at 100% 80%, rgba(20, 184, 166, 0.06), transparent 50%),
+        var(--bg);
+      color: var(--text);
+    }
+    a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 0.18em; }
+    a:hover { color: var(--accent-dim); }
+    .skip {
+      position: absolute;
+      left: 0.75rem;
+      top: -3rem;
+      padding: 0.4rem 0.7rem;
+      background: var(--accent);
+      color: var(--accent-ink);
+      border-radius: 8px;
+      z-index: 10;
+    }
+    .skip:focus { top: 0.75rem; }
+    .wrap {
+      width: min(var(--max), calc(100% - 2rem));
+      margin: 0 auto;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 1.15rem 0 0;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.7rem;
+      color: inherit;
+      text-decoration: none;
+      font-weight: 650;
+      letter-spacing: -0.02em;
+    }
+    .logo {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: var(--accent-dim);
+      box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 16%, transparent);
+      position: relative;
+      flex: 0 0 auto;
+    }
+    .logo::after {
+      content: "";
+      position: absolute;
+      inset: 10px;
+      border-radius: 50%;
+      background: #f8fffd;
+    }
+    nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.85rem 1.1rem;
+      font-size: 0.92rem;
+    }
+    nav a { color: var(--muted); text-decoration: none; }
+    nav a:hover { color: var(--text); }
+    .hero {
+      text-align: center;
+      padding: 4.2rem 0 2.4rem;
+    }
+    .pills {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin: 0 0 1.4rem;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.28rem 0.75rem;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      font-size: 0.78rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .pill strong { color: var(--accent); font-weight: 650; letter-spacing: 0; text-transform: none; }
+    h1 {
+      margin: 0 0 0.7rem;
+      font-size: clamp(2.2rem, 6vw, 3.6rem);
+      line-height: 1.1;
+      letter-spacing: -0.04em;
+      font-weight: 700;
+    }
+    .lede {
+      margin: 0 auto 0.55rem;
+      max-width: 40rem;
+      color: var(--muted);
+      font-size: 1.08rem;
+    }
+    .lede-zh {
+      margin: 0 auto 1.6rem;
+      max-width: 40rem;
+      color: var(--muted);
+      font-size: 0.98rem;
+    }
+    .cta {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 0.7rem;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 2.7rem;
+      padding: 0.55rem 1.15rem;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: var(--accent-ink);
+      border-color: transparent;
+    }
+    .btn-primary:hover { filter: brightness(1.06); color: var(--accent-ink); }
+    .btn-ghost {
+      background: color-mix(in srgb, var(--bg-elev) 80%, transparent);
+      color: var(--text);
+    }
+    .btn-ghost:hover { border-color: var(--accent); color: var(--text); }
+    .store-note {
+      margin: 1.15rem 0 0;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    .hero-shot {
+      margin: 2.6rem auto 0;
+      max-width: 52rem;
+      border-radius: 22px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
+    }
+    .hero-shot img {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+    section { padding: 2.6rem 0; }
+    .section-kicker {
+      margin: 0 0 0.35rem;
+      color: var(--accent);
+      font-size: 0.78rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+    h2 {
+      margin: 0 0 0.4rem;
+      font-size: clamp(1.5rem, 3vw, 2rem);
+      letter-spacing: -0.03em;
+    }
+    .section-zh { margin: 0 0 1.4rem; color: var(--muted); }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.9rem;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 1.15rem 1.2rem 1.2rem;
+    }
+    .card h3 {
+      margin: 0 0 0.25rem;
+      font-size: 1.05rem;
+      letter-spacing: -0.02em;
+    }
+    .card p { margin: 0; color: var(--muted); font-size: 0.95rem; }
+    .card .zh { margin-top: 0.4rem; font-size: 0.88rem; }
+    .stack { display: grid; gap: 0.9rem; }
+    .model-row {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 0.85rem;
+      align-items: start;
+    }
+    .step {
+      width: 1.7rem;
+      height: 1.7rem;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: color-mix(in srgb, var(--accent) 18%, transparent);
+      color: var(--accent);
+      font-size: 0.82rem;
+      font-weight: 700;
+    }
+    ol.install {
+      margin: 0;
+      padding-left: 1.2rem;
+    }
+    ol.install li { margin: 0.35rem 0; }
+    code, kbd {
+      font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+      font-size: 0.88em;
+    }
+    kbd {
+      border: 1px solid var(--line);
+      border-bottom-width: 2px;
+      border-radius: 6px;
+      padding: 0.05rem 0.35rem;
+      background: var(--bg-elev);
+    }
+    .shots {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 0.9rem;
+    }
+    .shots figure {
+      margin: 0;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--card);
+    }
+    .shots img { display: block; width: 100%; height: auto; }
+    .shots figcaption {
+      padding: 0.7rem 0.9rem 0.85rem;
+      color: var(--muted);
+      font-size: 0.86rem;
+    }
+    footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+      border-top: 1px solid var(--line);
+      padding: 1.6rem 0 2.4rem;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    footer nav { gap: 0.85rem; }
+    @media (max-width: 760px) {
+      .hero { padding-top: 2.6rem; }
+      .grid, .shots { grid-template-columns: 1fr; }
+      header { align-items: flex-start; flex-direction: column; }
+    }
   </style>
 </head>
 <body>
-  <h1>Smart Tab Pilot</h1>
-  <p>Chrome extension docs used for the Chrome Web Store listing.</p>
-  <ul>
-    <li><a href="chrome-web-store/privacy.html">Privacy policy</a> (store HTTPS URL)</li>
-    <li><a href="https://github.com/BiuBiuHu/smart-tab-pilot">Source repository</a></li>
-  </ul>
+  <a class="skip" href="#main">Skip to content</a>
+  <div class="wrap">
+    <header>
+      <a class="brand" href="#main">
+        <span class="logo" aria-hidden="true"></span>
+        Smart Tab Pilot
+      </a>
+      <nav aria-label="Primary">
+        <a href="#features">Features</a>
+        <a href="#install">Install</a>
+        <a href="https://github.com/BiuBiuHu/smart-tab-pilot">GitHub</a>
+        <a href="chrome-web-store/privacy.html">Privacy</a>
+      </nav>
+    </header>
+
+    <main id="main">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="pills" aria-label="Status">
+          <span class="pill">Chrome · Manifest V3</span>
+          <span class="pill">MIT</span>
+          <span class="pill"><strong>Chrome Web Store</strong> · Coming soon / under review</span>
+        </div>
+        <h1 id="hero-title">Keep tabs by task, not by website.</h1>
+        <p class="lede">Exact URL dedupe with a cross-window jump, plus a learnable task navigation graph. Side panel only. Models: on-device Nano → your OpenAI-compatible endpoint → local heuristics.</p>
+        <p class="lede-zh" lang="zh-Hans">精确 URL 去重（跨窗口跳转）+ 任务导航图归组。侧边栏操作。模型顺序：设备端 Nano → 自定义 OpenAI 兼容接口 → 启发式。</p>
+        <div class="cta">
+          <a class="btn btn-primary" href="https://github.com/BiuBiuHu/smart-tab-pilot">View source on GitHub</a>
+          <a class="btn btn-ghost" href="#install">Load unpacked</a>
+          <a class="btn btn-ghost" href="chrome-web-store/privacy.html">Privacy policy</a>
+        </div>
+        <p class="store-note">The Chrome Web Store item is in review. There is no public install URL yet — use Load unpacked from the repository root.</p>
+        <figure class="hero-shot">
+          <img src="assets/hero.png" width="1280" height="800" alt="Smart Tab Pilot: precise dedupe and task navigation graph" />
+        </figure>
+      </section>
+
+      <section id="features" aria-labelledby="features-title">
+        <p class="section-kicker">Features</p>
+        <h2 id="features-title">What it does</h2>
+        <p class="section-zh" lang="zh-Hans">给使用者看的能力，而不是实现细节。</p>
+        <div class="grid">
+          <article class="card">
+            <h3>Exact URL dedupe</h3>
+            <p>If the URL is already open in any window, jump there and close the duplicate. Hash is part of the match unless you ignore it.</p>
+            <p class="zh" lang="zh-Hans">任一窗口已有相同 URL 时，聚焦已有标签并关掉重复页。默认含 hash。</p>
+          </article>
+          <article class="card">
+            <h3>Task navigation graph</h3>
+            <p>Groups by opener, referrer, nearby opens, and learned path priors. Same hostname does not force a merge.</p>
+            <p class="zh" lang="zh-Hans">按真实导航关系归组；同域不同主题仍可拆开，不按域名一锅炖。</p>
+          </article>
+          <article class="card">
+            <h3>Side panel</h3>
+            <p>Click the toolbar icon or press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd> / <kbd>⌘</kbd><kbd>⇧</kbd><kbd>K</kbd>. No popup.</p>
+            <p class="zh" lang="zh-Hans">点击工具栏图标即可占满浏览器侧栏。</p>
+          </article>
+          <article class="card">
+            <h3>Settings as its own view</h3>
+            <p>Language, Nano, custom model, and toggles sit behind the gear — the task list stays the main surface.</p>
+            <p class="zh" lang="zh-Hans">设置是侧栏里的独立页面，不是和任务列表挤在一起。</p>
+          </article>
+          <article class="card">
+            <h3>Window scope</h3>
+            <p>All windows or current window only — one logical view across monitors. The choice is saved.</p>
+            <p class="zh" lang="zh-Hans">一键切换「全部窗口 / 仅当前窗口」。</p>
+          </article>
+          <article class="card">
+            <h3>Drag-merge &amp; close group</h3>
+            <p>Drag a task or tab onto another to merge, split it back out, or close a whole logical group.</p>
+            <p class="zh" lang="zh-Hans">拖拽合并、拆成独立任务，或关闭本组。</p>
+          </article>
+          <article class="card">
+            <h3>中文 / English</h3>
+            <p>Follow the browser, or lock the UI to Chinese or English.</p>
+            <p class="zh" lang="zh-Hans">跟随浏览器，或在设置里锁定语言。</p>
+          </article>
+          <article class="card">
+            <h3>Your model, or none</h3>
+            <p>Prefer Gemini Nano on device. Else your OpenAI-compatible Base URL. Else heuristics — the graph still works.</p>
+            <p class="zh" lang="zh-Hans">不附带厂商后台；自定义端点完全由你填写。</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="models" aria-labelledby="models-title">
+        <p class="section-kicker">Models</p>
+        <h2 id="models-title">Nano → custom → heuristic</h2>
+        <p class="section-zh" lang="zh-Hans">命名和混杂簇精炼才走模型；分组主路径仍是导航图。</p>
+        <div class="stack">
+          <div class="card model-row">
+            <span class="step" aria-hidden="true">1</span>
+            <div>
+              <h3>On-device Gemini Nano</h3>
+              <p>Chrome Prompt API <code>LanguageModel</code>. If the model is downloadable, tap <strong>Download / enable Nano</strong> in Settings (user gesture required).</p>
+            </div>
+          </div>
+          <div class="card model-row">
+            <span class="step" aria-hidden="true">2</span>
+            <div>
+              <h3>Your OpenAI-compatible endpoint</h3>
+              <p>Base URL, API key, and model name in <code>chrome.storage.sync</code>. Requests go only to <strong>the URL you type</strong>.</p>
+            </div>
+          </div>
+          <div class="card model-row">
+            <span class="step" aria-hidden="true">3</span>
+            <div>
+              <h3>Local heuristics</h3>
+              <p>Title + short summary keywords. No page text leaves the device.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="install" aria-labelledby="install-title">
+        <p class="section-kicker">Install</p>
+        <h2 id="install-title">Load unpacked</h2>
+        <p class="section-zh" lang="zh-Hans">在商店上架前，从源码加载已解压的扩展程序。选择包含 <code>manifest.json</code> 的仓库根目录。</p>
+        <div class="card">
+          <ol class="install">
+            <li>Open Chrome → <code>chrome://extensions</code>.</li>
+            <li>Enable <strong>Developer mode</strong>.</li>
+            <li>Click <strong>Load unpacked</strong>.</li>
+            <li>Select the <strong>repository root</strong> — the folder that contains <code>manifest.json</code> (the directory you cloned, e.g. <code>smart-tab-pilot/</code>).</li>
+            <li>Pin the icon, then click it (or <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd> / <kbd>⌘</kbd><kbd>⇧</kbd><kbd>K</kbd>).</li>
+          </ol>
+          <p class="store-note">Chrome Web Store: <strong>Coming soon / under review</strong>. This page does not link a live store listing.</p>
+        </div>
+      </section>
+
+      <section aria-labelledby="gallery-title">
+        <p class="section-kicker">Product</p>
+        <h2 id="gallery-title">Side panel &amp; window scope</h2>
+        <p class="section-zh" lang="zh-Hans">商店用产品图，不是模拟界面。</p>
+        <div class="shots">
+          <figure>
+            <img src="assets/window-scope.png" width="1280" height="800" alt="Toggle all windows or current window only — one logical view across monitors" />
+            <figcaption>All windows / current window only — one logical view across monitors.<br lang="zh-Hans">跨窗口逻辑视图：全部窗口或仅当前窗口。</figcaption>
+          </figure>
+          <figure>
+            <img src="assets/side-panel.png" width="1280" height="800" alt="Click the toolbar icon to open the Smart Tab Pilot side panel" />
+            <figcaption>Click the toolbar icon to open the side panel.<br lang="zh-Hans">点击工具栏图标即可打开侧边栏。</figcaption>
+          </figure>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <p>Smart Tab Pilot · MIT · v1.5.0 · Chrome Manifest V3</p>
+      <nav aria-label="Footer">
+        <a href="https://github.com/BiuBiuHu/smart-tab-pilot">Source</a>
+        <a href="chrome-web-store/privacy.html">Privacy policy</a>
+        <a href="https://github.com/BiuBiuHu/smart-tab-pilot/blob/main/LICENSE">License</a>
+      </nav>
+    </footer>
+  </div>
 </body>
 </html>
