@@ -9,13 +9,21 @@
 
 中文：跨窗口精确 URL 去重跳转，再用任务导航图按来源 / 时间归组（语义只负责精炼与命名）。侧边栏操作；模型顺序为 Nano → 自定义 OpenAI 兼容接口 → 启发式。
 
-<p align="center">
-  <img src="docs/assets/hero.png" alt="Smart Tab Pilot brand splash: precise dedupe and task navigation graph" width="880" />
-</p>
-
 Chrome Web Store listing is **under review** (coming soon). Until then, load the unpacked source from this repository. Privacy policy: [https://biubiuhu.github.io/smart-tab-pilot/chrome-web-store/privacy.html](https://biubiuhu.github.io/smart-tab-pilot/chrome-web-store/privacy.html).
 
 Pure front-end JavaScript — no build step. License: [MIT](./LICENSE).
+
+## Promo
+
+Watch the ~28s product tour on the [GitHub Pages homepage](https://biubiuhu.github.io/smart-tab-pilot/#promo) (HTML5 player). GitHub’s README cannot play `<video>` inline — click the poster, or open the [hosted file](https://biubiuhu.github.io/smart-tab-pilot/assets/promo.mp4).
+
+中文：约 28 秒产品介绍（精确去重 · 任务导航图 · 侧边栏）。商店即将上线，没有 YouTube 镜像。
+
+<p align="center">
+  <a href="https://biubiuhu.github.io/smart-tab-pilot/#promo">
+    <img src="docs/assets/hero.png" alt="Watch the Smart Tab Pilot product promo (~28s)" width="880" />
+  </a>
+</p>
 
 ## Features
 
@@ -102,6 +110,7 @@ Manual checklists:
 ## Documentation
 
 - Product site (GitHub Pages): [https://biubiuhu.github.io/smart-tab-pilot/](https://biubiuhu.github.io/smart-tab-pilot/)
+- Product promo (~28s): [watch on Pages](https://biubiuhu.github.io/smart-tab-pilot/#promo) · [promo.mp4](https://biubiuhu.github.io/smart-tab-pilot/assets/promo.mp4)
 - Task-graph design: [`docs/task-graph-cross-window/01-product/PRD.md`](./docs/task-graph-cross-window/01-product/PRD.md)
 - Store listing drafts (en / zh): [`docs/chrome-web-store/`](./docs/chrome-web-store/)
 - Engineering notes (not the public homepage): [`docs/smart-tab-pilot-mvp/`](./docs/smart-tab-pilot-mvp/), [`docs/task-graph-cross-window/`](./docs/task-graph-cross-window/)

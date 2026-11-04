@@ -205,11 +205,22 @@
       border: 1px solid var(--line);
       box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
     }
-    .hero-shot img {
+    .hero-shot img,
+    .hero-shot video {
       display: block;
       width: 100%;
       height: auto;
+      background: #020807;
     }
+    .hero-caption {
+      margin: 0;
+      padding: 0.75rem 1rem 0.9rem;
+      color: var(--muted);
+      font-size: 0.88rem;
+      text-align: left;
+      background: var(--card);
+    }
+    .hero-caption .zh { display: block; margin-top: 0.2rem; }
     section { padding: 2.6rem 0; }
     .section-kicker {
       margin: 0 0 0.35rem;
@@ -321,6 +332,7 @@
         Smart Tab Pilot
       </a>
       <nav aria-label="Primary">
+        <a href="#promo">Promo</a>
         <a href="#features">Features</a>
         <a href="#install">Install</a>
         <a href="https://github.com/BiuBiuHu/smart-tab-pilot">GitHub</a>
@@ -339,13 +351,28 @@
         <p class="lede">Exact URL dedupe with a cross-window jump, plus a learnable task navigation graph. Side panel only. Models: on-device Nano → your OpenAI-compatible endpoint → local heuristics.</p>
         <p class="lede-zh" lang="zh-Hans">精确 URL 去重（跨窗口跳转）+ 任务导航图归组。侧边栏操作。模型顺序：设备端 Nano → 自定义 OpenAI 兼容接口 → 启发式。</p>
         <div class="cta">
-          <a class="btn btn-primary" href="https://github.com/BiuBiuHu/smart-tab-pilot">View source on GitHub</a>
+          <a class="btn btn-primary" href="#promo">Watch promo</a>
+          <a class="btn btn-ghost" href="https://github.com/BiuBiuHu/smart-tab-pilot">View source on GitHub</a>
           <a class="btn btn-ghost" href="#install">Load unpacked</a>
           <a class="btn btn-ghost" href="chrome-web-store/privacy.html">Privacy policy</a>
         </div>
         <p class="store-note">The Chrome Web Store item is in review. There is no public install URL yet — use Load unpacked from the repository root.</p>
-        <figure class="hero-shot">
-          <img src="assets/hero.png" width="1280" height="800" alt="Smart Tab Pilot: precise dedupe and task navigation graph" />
+        <figure class="hero-shot" id="promo">
+          <video
+            controls
+            playsinline
+            preload="metadata"
+            poster="assets/hero.png"
+            width="1920"
+            height="1080"
+            aria-label="Smart Tab Pilot product promo: precise dedupe and task navigation graph"
+          >
+            <source src="assets/promo.mp4" type="video/mp4" />
+          </video>
+          <figcaption class="hero-caption">
+            Product promo (~28s) — exact URL dedupe, task navigation graph, side panel. Chrome Web Store coming soon.
+            <span class="zh" lang="zh-Hans">产品介绍：精确去重 · 任务导航图 · 侧边栏。商店即将上线。</span>
+          </figcaption>
         </figure>
       </section>
 
