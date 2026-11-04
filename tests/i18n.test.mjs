@@ -216,5 +216,7 @@ describe('sidepanel HTML + manifest locales', () => {
     assert.equal(enStore.extName.message, 'Smart Tab Pilot');
     assert.ok(zhStore.extDescription.message.includes('去重'));
     assert.deepEqual(Object.keys(enStore).sort(), Object.keys(zhStore).sort());
+    assert.ok(enStore.extDescription.message.length <= 132, enStore.extDescription.message.length);
+    assert.ok(zhStore.extDescription.message.length <= 132, zhStore.extDescription.message.length);
   });
 });

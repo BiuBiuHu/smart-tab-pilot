@@ -3,7 +3,7 @@
     "message": "Smart Tab Pilot"
   },
   "extDescription": {
-    "message": "Exact URL dedupe (cross-window jump) plus a task navigation graph (source/time first, semantics refine). Optional quick search. Side-panel UI."
+    "message": "Exact URL dedupe (cross-window jump) plus a task navigation graph. Optional quick search. Side-panel UI."
   },
   "actionTitle": {
     "message": "Smart Tab Pilot"
