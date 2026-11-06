@@ -253,6 +253,7 @@
     }
     .card p { margin: 0; color: var(--muted); font-size: 0.95rem; }
     .card .zh { margin-top: 0.4rem; font-size: 0.88rem; }
+    .card .btn { margin-top: 0.85rem; }
     .stack { display: grid; gap: 0.9rem; }
     .model-row {
       display: grid;
@@ -335,6 +336,7 @@
         <a href="#promo">Promo</a>
         <a href="#features">Features</a>
         <a href="#install">Install</a>
+        <a href="https://chromewebstore.google.com/detail/smart-tab-pilot/acnhnhllaloccmnmdjcgmkmpbkpdegfd" target="_blank" rel="noopener noreferrer">Chrome Web Store</a>
         <a href="https://github.com/BiuBiuHu/smart-tab-pilot" target="_blank" rel="noopener noreferrer">GitHub</a>
         <a href="chrome-web-store/privacy.html">Privacy</a>
       </nav>
@@ -345,18 +347,18 @@
         <div class="pills" aria-label="Status">
           <span class="pill">Chrome · Manifest V3</span>
           <span class="pill">MIT</span>
-          <span class="pill"><strong>Chrome Web Store</strong> · Coming soon / under review</span>
+          <span class="pill"><strong>Chrome Web Store</strong> · Available / 已上架 · v1.5.0</span>
         </div>
         <h1 id="hero-title">Keep tabs by task, not by website.</h1>
         <p class="lede">Exact URL dedupe with a cross-window jump, plus a learnable task navigation graph. Side panel only. Models: on-device Nano → your OpenAI-compatible endpoint → local heuristics.</p>
         <p class="lede-zh" lang="zh-Hans">精确 URL 去重（跨窗口跳转）+ 任务导航图归组。侧边栏操作。模型顺序：设备端 Nano → 自定义 OpenAI 兼容接口 → 启发式。</p>
         <div class="cta">
-          <a class="btn btn-primary" href="#promo">Watch promo</a>
+          <a class="btn btn-primary" href="https://chromewebstore.google.com/detail/smart-tab-pilot/acnhnhllaloccmnmdjcgmkmpbkpdegfd" target="_blank" rel="noopener noreferrer">Install from Chrome Web Store</a>
+          <a class="btn btn-ghost" href="#promo">Watch promo</a>
           <a class="btn btn-ghost" href="https://github.com/BiuBiuHu/smart-tab-pilot" target="_blank" rel="noopener noreferrer">View source on GitHub</a>
           <a class="btn btn-ghost" href="#install">Load unpacked</a>
-          <a class="btn btn-ghost" href="chrome-web-store/privacy.html">Privacy policy</a>
         </div>
-        <p class="store-note">The Chrome Web Store item is in review. There is no public install URL yet — use Load unpacked from the repository root.</p>
+        <p class="store-note">On the Chrome Web Store now (v1.5.0, listed 2026-11-05). Load unpacked from source remains for developers.<br lang="zh-Hans">已在 Chrome 网上应用店上架（v1.5.0，2026-11-05）。开发者仍可从源码加载已解压的扩展。</p>
         <figure class="hero-shot" id="promo">
           <video
             controls
@@ -370,8 +372,8 @@
             <source src="assets/promo.mp4" type="video/mp4" />
           </video>
           <figcaption class="hero-caption">
-            Product promo (~28s) — exact URL dedupe, task navigation graph, side panel. Chrome Web Store coming soon.
-            <span class="zh" lang="zh-Hans">产品介绍：精确去重 · 任务导航图 · 侧边栏。商店即将上线。</span>
+            Product promo (~28s) — exact URL dedupe, task navigation graph, side panel. Light tech BGM; press play (no autoplay).
+            <span class="zh" lang="zh-Hans">产品介绍：精确去重 · 任务导航图 · 侧边栏。含轻科技背景乐，点击播放（不自动播）。</span>
           </figcaption>
         </figure>
       </section>
@@ -455,17 +457,27 @@
 
       <section id="install" aria-labelledby="install-title">
         <p class="section-kicker">Install</p>
-        <h2 id="install-title">Load unpacked</h2>
-        <p class="section-zh" lang="zh-Hans">在商店上架前，从源码加载已解压的扩展程序。选择包含 <code>manifest.json</code> 的仓库根目录。</p>
-        <div class="card">
-          <ol class="install">
-            <li>Open Chrome → <code>chrome://extensions</code>.</li>
-            <li>Enable <strong>Developer mode</strong>.</li>
-            <li>Click <strong>Load unpacked</strong>.</li>
-            <li>Select the <strong>repository root</strong> — the folder that contains <code>manifest.json</code> (the directory you cloned, e.g. <code>smart-tab-pilot/</code>).</li>
-            <li>Pin the icon, then click it (or <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd> / <kbd>⌘</kbd><kbd>⇧</kbd><kbd>K</kbd>).</li>
-          </ol>
-          <p class="store-note">Chrome Web Store: <strong>Coming soon / under review</strong>. This page does not link a live store listing.</p>
+        <h2 id="install-title">Chrome Web Store</h2>
+        <p class="section-zh" lang="zh-Hans">推荐从商店安装。Load unpacked / 源码 ZIP 仅给开发者或无法使用商店的环境。</p>
+        <div class="stack">
+          <div class="card">
+            <p>Public listing <strong>v1.5.0</strong> (updated 2026-11-05).</p>
+            <p class="zh" lang="zh-Hans">公开发布版本 1.5.0，商店更新日期 2026-11-05。</p>
+            <p class="zh">
+              <a class="btn btn-primary" href="https://chromewebstore.google.com/detail/smart-tab-pilot/acnhnhllaloccmnmdjcgmkmpbkpdegfd" target="_blank" rel="noopener noreferrer">Install from Chrome Web Store</a>
+            </p>
+          </div>
+          <div class="card">
+            <h3>Load unpacked (developers)</h3>
+            <p class="zh" lang="zh-Hans">从包含 <code>manifest.json</code> 的仓库根目录加载已解压的扩展程序。</p>
+            <ol class="install">
+              <li>Open Chrome → <code>chrome://extensions</code>.</li>
+              <li>Enable <strong>Developer mode</strong>.</li>
+              <li>Click <strong>Load unpacked</strong>.</li>
+              <li>Select the <strong>repository root</strong> — the folder that contains <code>manifest.json</code> (the directory you cloned, e.g. <code>smart-tab-pilot/</code>).</li>
+              <li>Pin the icon, then click it (or <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd> / <kbd>⌘</kbd><kbd>⇧</kbd><kbd>K</kbd>).</li>
+            </ol>
+          </div>
         </div>
       </section>
 
@@ -489,6 +501,7 @@
     <footer>
       <p>Smart Tab Pilot · MIT · v1.5.0 · Chrome Manifest V3</p>
       <nav aria-label="Footer">
+        <a href="https://chromewebstore.google.com/detail/smart-tab-pilot/acnhnhllaloccmnmdjcgmkmpbkpdegfd" target="_blank" rel="noopener noreferrer">Chrome Web Store</a>
         <a href="https://github.com/BiuBiuHu/smart-tab-pilot" target="_blank" rel="noopener noreferrer">Source</a>
         <a href="chrome-web-store/privacy.html">Privacy policy</a>
         <a href="https://github.com/BiuBiuHu/smart-tab-pilot/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">License</a>
