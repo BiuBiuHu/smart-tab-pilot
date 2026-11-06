@@ -9,7 +9,7 @@
 
 中文：跨窗口精确 URL 去重跳转，再用任务导航图按来源 / 时间归组（语义只负责精炼与命名）。侧边栏操作；模型顺序为 Nano → 自定义 OpenAI 兼容接口 → 启发式。
 
-Chrome Web Store listing is **under review** (coming soon). Until then, load the unpacked source from this repository. Privacy policy: [https://biubiuhu.github.io/smart-tab-pilot/chrome-web-store/privacy.html](https://biubiuhu.github.io/smart-tab-pilot/chrome-web-store/privacy.html).
+Available on the [Chrome Web Store](https://chromewebstore.google.com/detail/smart-tab-pilot/acnhnhllaloccmnmdjcgmkmpbkpdegfd) (v1.5.0, listed 2026-11-05). Load unpacked from this repository for development. Privacy policy: [https://biubiuhu.github.io/smart-tab-pilot/chrome-web-store/privacy.html](https://biubiuhu.github.io/smart-tab-pilot/chrome-web-store/privacy.html).
 
 Pure front-end JavaScript — no build step. License: [MIT](./LICENSE).
 
@@ -17,7 +17,7 @@ Pure front-end JavaScript — no build step. License: [MIT](./LICENSE).
 
 Watch the ~28s product tour on the [GitHub Pages homepage](https://biubiuhu.github.io/smart-tab-pilot/#promo) (HTML5 player). Light tech BGM; press play to hear it (no autoplay). GitHub’s README cannot play `<video>` inline — click the poster, or open the [hosted file](https://biubiuhu.github.io/smart-tab-pilot/assets/promo.mp4).
 
-中文：约 28 秒产品介绍（精确去重 · 任务导航图 · 侧边栏），含轻科技背景乐。商店即将上线，没有 YouTube 镜像。
+中文：约 28 秒产品介绍（精确去重 · 任务导航图 · 侧边栏），含轻科技背景乐。商店已上架。没有 YouTube 镜像。
 
 <p align="center">
   <a href="https://biubiuhu.github.io/smart-tab-pilot/#promo">
@@ -42,6 +42,8 @@ Watch the ~28s product tour on the [GitHub Pages homepage](https://biubiuhu.gith
 
 ## Install
 
+Preferred: [Chrome Web Store](https://chromewebstore.google.com/detail/smart-tab-pilot/acnhnhllaloccmnmdjcgmkmpbkpdegfd) (v1.5.0).
+
 Load unpacked from source (Chrome, developer mode):
 
 1. Open Chrome and go to `chrome://extensions`.
@@ -51,8 +53,6 @@ Load unpacked from source (Chrome, developer mode):
 5. Pin the toolbar icon, then **click the icon** (or press Ctrl+Shift+K / ⌘⇧K) to open the side panel.
 
 After you edit source files, click **Reload** on `chrome://extensions`.
-
-Chrome Web Store install will be linked here once the listing is published. The item is currently **in review**.
 
 ## Usage
 
