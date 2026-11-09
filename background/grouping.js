@@ -1,6 +1,7 @@
 /**
- * Task-aware grouping: 任务导航图 clusters → per-window chrome.tabGroups.
- * Cross-window clusters are logical only; physical groups stay in one windowId.
+ * Task-aware grouping: conservative 任务导航图 + model same-task judge
+ * → per-window chrome.tabGroups. Cross-window clusters are logical only;
+ * physical groups stay in one windowId.
  */
 import { withTimeout } from '../shared/async-timeout.js';
 import {
@@ -24,7 +25,7 @@ import {
 } from '../shared/physical-groups.js';
 import { getSettings } from '../shared/storage.js';
 import { listUncachedEligibleTabs } from '../shared/refine-queue.js';
-import { buildTaskClusters } from '../shared/task-graph.js';
+import { buildTaskClusters, collectRuleCandidates } from '../shared/task-graph.js';
 import { shouldSkipUrl } from '../shared/url-utils.js';
 import { classifyPage, tryModelSameGroupJudge } from './classifier.js';
 import { loadPriors, loadSessionFeedback, recordModelMerges } from './nav-memory.js';
@@ -344,7 +345,8 @@ async function maybeApplyModelJudge(clusters, nodes, buildOpts) {
   try {
     const summariesByTab = new Map(nodes.map((n) => [n.id, n.summary]));
     const nodesById = new Map(nodes.map((n) => [n.id, n]));
-    const payload = buildJudgePayload(clusters, summariesByTab, nodesById);
+    const rulePairs = collectRuleCandidates(nodes, buildOpts);
+    const payload = buildJudgePayload(clusters, summariesByTab, nodesById, rulePairs);
     if (payload.clusters.length < 2) return clusters;
     if (payload.clusters.length > 18) {
       const wanted = new Set(payload.candidates.flatMap((p) => [p.a, p.b]));

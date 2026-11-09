@@ -63,7 +63,7 @@ flowchart TB
 ### 3.1 活边（`chrome.storage.session` `tabLineage`）
 
 ```text
-tabId → { openerTabId, openerUrl, createdAt, windowId, url, pendingUrl, referrerUrl }
+tabId → { openerTabId, openerUrl, createdAt, windowId, url, pendingUrl, referrerUrl, birthUrl, openerFromNavigation }
 ```
 
 `createdAt === 0` 表示未观察到 `onCreated`（SW 冷启动补种），**不参与时间边**，避免把所有旧标签误并。
@@ -105,9 +105,11 @@ tabId → { title, url, pathKey, slugs[], excerpt≤280, extractedAt }
 
 ## 4. 聚类（union-find）
 
-顺序：会话合并 → opener → referrer 命中 → 时间（主题兼容）→ 学习 prior → 语义只拆弱混杂簇 → **模型同组**（短摘要；slug 只提供 candidate）。
+顺序：会话合并 → 真实导航 opener → referrer 命中 → **模型同组**（标题+URL+短摘要；规则只提供 candidate）→ 语义只拆弱混杂簇。
 
-**禁止**：用裸 hostname、regex 产品键或「仅 label 相同」做并查集 union。`bettr-promotion` 是特征，不是簇 id。同窗**物理组**按规范化标题合一。
+时间邻接 / 同窗口 / 学习 prior / 产品 slug **禁止** hard-merge。无模型时只保留真实来源/引用（宁可拆开）。
+
+**禁止**：用裸 hostname、regex 产品键、「仅 label 相同」或同窗口/开页时间做并查集 union。`bettr-promotion` 是特征，不是簇 id。同窗**物理组**按规范化标题合一。
 
 **跨窗口不是拆组原因**：逻辑簇本就可跨窗。Unio / Marketing / Marmot / ac.alipay 应在模型判定后成为同一逻辑任务「Bettr Promotion」。
 

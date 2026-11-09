@@ -9,7 +9,7 @@ import {
   rejectDomainishLabel,
   sanitizeLabel,
 } from '../shared/label-utils.js';
-import { normalizeUrl, shouldSkipUrl } from '../shared/url-utils.js';
+import { isEphemeralNewTabUrl, normalizeUrl, shouldSkipUrl } from '../shared/url-utils.js';
 
 describe('normalizeUrl', () => {
   it('keeps hash by default', () => {
@@ -40,6 +40,18 @@ describe('shouldSkipUrl', () => {
     assert.equal(shouldSkipUrl('chrome://extensions'), true);
     assert.equal(shouldSkipUrl('about:blank'), true);
     assert.equal(shouldSkipUrl('https://example.com'), false);
+  });
+});
+
+describe('isEphemeralNewTabUrl', () => {
+  it('treats blank and browser new-tab pages as non-navigation births', () => {
+    assert.equal(isEphemeralNewTabUrl(''), true);
+    assert.equal(isEphemeralNewTabUrl('about:blank'), true);
+    assert.equal(isEphemeralNewTabUrl('chrome://newtab/'), true);
+    assert.equal(isEphemeralNewTabUrl('chrome://new-tab-page/'), true);
+    assert.equal(isEphemeralNewTabUrl('edge://newtab'), true);
+    assert.equal(isEphemeralNewTabUrl('https://example.com/page'), false);
+    assert.equal(isEphemeralNewTabUrl('http://127.0.0.1:8787/'), false);
   });
 });
 

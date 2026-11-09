@@ -4,8 +4,11 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { emptyPriorStore, bumpPrior } from '../shared/nav-priors.js';
+import { applyModelJudgment } from '../shared/model-group-judge.js';
 import {
   buildTaskClusters,
+  collectRuleCandidates,
+  isReliableOpener,
   labelsCompatible,
   majorityLabel,
   recordSessionFeedback,
@@ -16,11 +19,15 @@ function tab(partial) {
     id: partial.id,
     windowId: partial.windowId ?? 1,
     openerTabId: partial.openerTabId ?? null,
+    openerFromNavigation: partial.openerFromNavigation,
+    birthUrl: partial.birthUrl,
+    pendingUrl: partial.pendingUrl,
     createdAt: partial.createdAt,
     url: partial.url,
     title: partial.title,
     referrerUrl: partial.referrerUrl,
     semanticLabel: partial.semanticLabel,
+    summary: partial.summary,
   };
 }
 
@@ -50,6 +57,7 @@ describe('buildTaskClusters — opener is strongest', () => {
       tab({
         id: 2,
         openerTabId: 1,
+        openerFromNavigation: true,
         url: 'https://stackoverflow.com/q/123',
         semanticLabel: '排错问答',
         createdAt: 1500,
@@ -57,6 +65,7 @@ describe('buildTaskClusters — opener is strongest', () => {
       tab({
         id: 3,
         openerTabId: 2,
+        openerFromNavigation: true,
         url: 'https://docs.example.com/auth',
         semanticLabel: 'API 文档',
         createdAt: 2000,
@@ -106,8 +115,8 @@ describe('buildTaskClusters — same domain must split by topic when tasks diffe
     assert.equal(clusters.length, 2);
   });
 
-  it('time-adjacent tabs with the same topic form one task', () => {
-    const clusters = buildTaskClusters([
+  it('time-adjacent tabs with the same topic stay split without a model', () => {
+    const nodes = [
       tab({
         id: 10,
         url: 'https://react.dev/reference/useeffect',
@@ -120,10 +129,11 @@ describe('buildTaskClusters — same domain must split by topic when tasks diffe
         semanticLabel: 'React hooks 入门',
         createdAt: 12_000,
       }),
-    ]);
-    assert.equal(clusters.length, 1);
-    assert.deepEqual(clusters[0].tabIds, [10, 20]);
-    assert.ok(clusters[0].edges.time >= 1);
+    ];
+    const clusters = buildTaskClusters(nodes);
+    assert.equal(clusters.length, 2);
+    const cands = collectRuleCandidates(nodes);
+    assert.ok(cands.some((p) => p.kind === 'time' && p.a === 10 && p.b === 20));
   });
 });
 
@@ -148,7 +158,7 @@ describe('buildTaskClusters — referrer click-source', () => {
 });
 
 describe('buildTaskClusters — learned priors', () => {
-  it('unions future similar navigations after opener co-occurrence was learned', () => {
+  it('learned co-occurrence is a candidate, not a conservative hard-merge', () => {
     let priors = emptyPriorStore();
     priors = bumpPrior(
       priors,
@@ -162,25 +172,24 @@ describe('buildTaskClusters — learned priors', () => {
       'https://docs.acme.dev/oncall/runbook',
       { source: 'opener', delta: 0.2, now: 2 },
     );
-    const clusters = buildTaskClusters(
-      [
-        tab({
-          id: 5,
-          url: 'https://linear.app/acme/issue/ABC-42',
-          semanticLabel: '项目管理',
-          createdAt: 9_000_000,
-        }),
-        tab({
-          id: 6,
-          url: 'https://docs.acme.dev/oncall/runbook',
-          semanticLabel: '项目管理',
-          createdAt: 9_900_000,
-        }),
-      ],
-      { priors },
-    );
-    assert.equal(clusters.length, 1);
-    assert.ok(clusters[0].edges.learned >= 1);
+    const nodes = [
+      tab({
+        id: 5,
+        url: 'https://linear.app/acme/issue/ABC-42',
+        semanticLabel: '项目管理',
+        createdAt: 9_000_000,
+      }),
+      tab({
+        id: 6,
+        url: 'https://docs.acme.dev/oncall/runbook',
+        semanticLabel: '项目管理',
+        createdAt: 9_900_000,
+      }),
+    ];
+    const clusters = buildTaskClusters(nodes, { priors });
+    assert.equal(clusters.length, 2, 'learned priors must not hard-merge');
+    const cands = collectRuleCandidates(nodes, { priors });
+    assert.ok(cands.some((p) => p.kind === 'learned' && p.a === 5 && p.b === 6));
   });
 
   it('does not use hostname-only priors to glue different topics', () => {
@@ -234,6 +243,7 @@ describe('session feedback extension point', () => {
         tab({
           id: 2,
           openerTabId: 1,
+          openerFromNavigation: true,
           url: 'https://b.example/y/doc',
           semanticLabel: '乙',
         }),
@@ -254,5 +264,195 @@ describe('majorityLabel', () => {
       ]),
       'API 文档',
     );
+  });
+});
+
+describe('isReliableOpener', () => {
+  it('requires an openerTabId and navigation evidence', () => {
+    assert.equal(isReliableOpener(tab({ id: 1, url: 'https://a.example/x' })), false);
+    assert.equal(
+      isReliableOpener(tab({ id: 2, openerTabId: 1, url: 'https://b.example/y' })),
+      false,
+    );
+    assert.equal(
+      isReliableOpener(
+        tab({ id: 2, openerTabId: 1, openerFromNavigation: true, url: 'https://b.example/y' }),
+      ),
+      true,
+    );
+    assert.equal(
+      isReliableOpener(
+        tab({
+          id: 2,
+          openerTabId: 1,
+          openerFromNavigation: false,
+          birthUrl: 'chrome://newtab/',
+          url: 'https://licenses.example.org/by/4.0/',
+        }),
+      ),
+      false,
+    );
+    assert.equal(
+      isReliableOpener(
+        tab({
+          id: 2,
+          openerTabId: 1,
+          birthUrl: 'https://docs.example.com/auth',
+          url: 'https://docs.example.com/auth',
+        }),
+      ),
+      true,
+    );
+  });
+});
+
+describe('independently opened same-window tabs stay separate', () => {
+  const t0 = 1_700_000_000_000;
+
+  it('does not hard-merge unrelated tabs that share a window, nearby open time, and Chrome tab-strip opener', () => {
+    const nodes = [
+      tab({
+        id: 1,
+        windowId: 1,
+        url: 'https://console.example-product.net/home',
+        title: 'Product console',
+        semanticLabel: '营销控制台',
+        createdAt: t0,
+      }),
+      tab({
+        id: 2,
+        windowId: 1,
+        openerTabId: 1,
+        openerFromNavigation: false,
+        birthUrl: 'chrome://newtab/',
+        url: 'https://chat.example.com/c/abc',
+        title: 'Draft a blog outline',
+        semanticLabel: '写作',
+        createdAt: t0 + 4_000,
+      }),
+      tab({
+        id: 3,
+        windowId: 1,
+        openerTabId: 1,
+        openerFromNavigation: false,
+        birthUrl: '',
+        url: 'https://calendar.example.org/today',
+        title: 'Calendar',
+        semanticLabel: '日历',
+        createdAt: t0 + 9_000,
+      }),
+      tab({
+        id: 4,
+        windowId: 1,
+        openerTabId: 2,
+        openerFromNavigation: false,
+        url: 'https://127.0.0.1:8899/network',
+        title: 'Local debugger',
+        semanticLabel: '本地调试',
+        createdAt: t0 + 14_000,
+      }),
+      tab({
+        id: 5,
+        windowId: 1,
+        openerTabId: 1,
+        openerFromNavigation: false,
+        url: 'https://licenses.example.org/by/4.0/',
+        title: 'License deed',
+        semanticLabel: '许可协议',
+        createdAt: t0 + 20_000,
+      }),
+      tab({
+        id: 6,
+        windowId: 1,
+        openerTabId: 1,
+        openerFromNavigation: false,
+        url: 'https://ops.corp.example.net/env/5987128',
+        title: 'Env dashboard',
+        semanticLabel: '环境面板',
+        createdAt: t0 + 28_000,
+      }),
+    ];
+    const clusters = buildTaskClusters(nodes);
+    assert.equal(clusters.length, 6);
+    for (const n of nodes) {
+      assert.equal(clusterOf(clusters, n.id).tabIds.length, 1);
+    }
+    assert.equal(clusters.every((c) => c.edges.opener === 0 && c.edges.time === 0), true);
+
+    const cands = collectRuleCandidates(nodes);
+    assert.ok(cands.some((p) => p.kind === 'opener-weak'));
+    assert.ok(cands.some((p) => p.kind === 'time'));
+    assert.equal(
+      cands.some((p) => p.kind === 'opener'),
+      false,
+      'tab-strip opener must not be advertised as a true navigation opener',
+    );
+  });
+
+  it('same Chrome window alone never unions two unrelated tabs', () => {
+    const clusters = buildTaskClusters([
+      tab({ id: 1, windowId: 7, url: 'https://a.example/x', semanticLabel: '甲' }),
+      tab({ id: 2, windowId: 7, url: 'https://b.example/y', semanticLabel: '乙' }),
+    ]);
+    assert.equal(clusters.length, 2);
+  });
+
+  it('unclassified labels plus open-time adjacency still stay split', () => {
+    const clusters = buildTaskClusters([
+      tab({
+        id: 1,
+        windowId: 1,
+        url: 'https://product.example.net/app',
+        semanticLabel: '未分类',
+        createdAt: 50_000,
+      }),
+      tab({
+        id: 2,
+        windowId: 1,
+        url: 'https://notes.example.org/scratch',
+        semanticLabel: '',
+        createdAt: 51_000,
+      }),
+    ]);
+    assert.equal(clusters.length, 2);
+  });
+});
+
+describe('product-path related tabs can still cluster via the model', () => {
+  const unio = 'https://bettr-promotion-dev-unio.page.alipay.net/page/home';
+  const marmot = 'https://www.marmot-cloud.com/bettr/bettr-promotion/it/console';
+  const marketing = 'https://bettr-promotion-marketing-console.example.com/login';
+
+  it('project path is a candidate but not a conservative union', () => {
+    const nodes = [
+      tab({ id: 1, windowId: 1, url: unio, semanticLabel: 'Unio', createdAt: 1 }),
+      tab({ id: 2, windowId: 1, url: marmot, semanticLabel: 'Marmot', createdAt: 8_000 }),
+      tab({ id: 3, windowId: 2, url: marketing, semanticLabel: '登录', createdAt: 9_000_000 }),
+    ];
+    const first = buildTaskClusters(nodes);
+    assert.equal(first.length, 3);
+    const kinds = new Set(collectRuleCandidates(nodes).map((p) => p.kind));
+    assert.ok(kinds.has('project'));
+    assert.ok(kinds.has('time'), 'nearby same-window product tabs are time candidates');
+  });
+
+  it('model extraUnions still join the same product across hosts/windows', () => {
+    const nodes = [
+      tab({ id: 1, windowId: 1, url: unio, title: 'Unio', semanticLabel: 'Unio' }),
+      tab({ id: 2, windowId: 3, url: marmot, title: 'Marmot', semanticLabel: 'Marmot' }),
+      tab({ id: 3, windowId: 3, url: marketing, title: 'Marketing', semanticLabel: '登录' }),
+    ];
+    const first = buildTaskClusters(nodes);
+    const merged = applyModelJudgment(
+      nodes,
+      first,
+      { merges: [[1, 2], [2, 3]] },
+      {},
+      buildTaskClusters,
+    );
+    assert.equal(merged.length, 1);
+    assert.deepEqual(merged[0].tabIds, [1, 2, 3]);
+    assert.equal(merged[0].label, 'Bettr Promotion');
+    assert.ok(merged[0].edges.model >= 1);
   });
 });

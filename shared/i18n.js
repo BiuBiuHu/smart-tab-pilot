@@ -10,7 +10,7 @@ export const UI_LOCALE_AUTO = 'auto';
 
 export const MESSAGES = {
   zh: {
-    subtitle: '精确去重 · 任务导航图（来源优先，语义精炼）',
+    subtitle: '精确去重 · 任务导航图（规则出候选，模型判断同一任务）',
     settings: '设置',
     settingsCurrentTitle: '当前：设置',
     settingsCurrentAria: '当前视图：设置',
@@ -36,7 +36,7 @@ export const MESSAGES = {
     nanoHintDownloadable: '模型尚未下载。请点击下方按钮（需用户手势）触发下载。',
     nanoHintDownloading: '模型正在下载，请稍候再试。',
     nanoHintUnavailable:
-      '当前环境无法使用 Nano。可配置下方自定义模型，或使用启发式主题名（任务簇仍以来源/时间为准）。',
+      '当前环境无法使用 Nano。可配置下方自定义模型，或使用启发式主题名（无模型时不按同窗口/开页时间硬合并）。',
     nanoHintMissing: '浏览器未暴露 LanguageModel。请使用支持 Prompt API 的 Chrome（实验旗标 / 足够新的版本）。',
     nanoDownloadBtn: '下载 / 启用 Nano 模型',
     nanoDownloadingBtn: '正在请求下载…',
@@ -53,12 +53,12 @@ export const MESSAGES = {
     customSaved: '自定义模型已保存。',
     fallbackCustom: '当前将使用自定义模型为任务簇命名（分组本身按任务导航图，非域名）。',
     fallbackHeuristic:
-      '无可用模型时，任务簇以来源/时间/学习边聚合，主题名用启发式（不会用域名作为组名）。',
+      '无可用模型时，只保留真实点击来源/引用（宁可拆开也不误并）；同窗口或开页时间相近不会硬合并。主题名用启发式。',
 
     togglesTitle: '功能开关',
     toggleDedupe: '精确 URL 去重跳转',
     toggleIgnoreHash: '去重时忽略 hash（默认关闭＝含 hash 精确匹配）',
-    toggleAutoGroup: '自动按任务归组（来源/时间优先，语义只作精炼）',
+    toggleAutoGroup: '自动按任务归组（模型判断是否同一任务；无模型时保守拆开）',
     toggleQuickSearch: '启用快速搜索（P1，默认关闭）',
 
     taskViewTitle: '任务视图',
@@ -137,7 +137,7 @@ export const MESSAGES = {
     searchTagClosed: '关闭',
   },
   en: {
-    subtitle: 'Exact dedupe · task navigation graph (source first, semantics refine)',
+    subtitle: 'Exact dedupe · task navigation graph (rules hint, model judges same-task)',
     settings: 'Settings',
     settingsCurrentTitle: 'Now: Settings',
     settingsCurrentAria: 'Current view: Settings',
@@ -164,7 +164,7 @@ export const MESSAGES = {
     nanoHintDownloadable: 'The model is not downloaded yet. Click the button below (user gesture required).',
     nanoHintDownloading: 'The model is downloading. Please wait and try again.',
     nanoHintUnavailable:
-      'Nano is not available here. Configure a custom model below, or use heuristic names (clusters still follow source/time).',
+      'Nano is not available here. Configure a custom model below, or use heuristic names (no hard-merge from same window or open time).',
     nanoHintMissing:
       'This browser does not expose LanguageModel. Use a Chrome build with the Prompt API (experiment flags / a recent version).',
     nanoDownloadBtn: 'Download / enable Nano',
@@ -183,12 +183,12 @@ export const MESSAGES = {
     fallbackCustom:
       'Task clusters will be named by the custom model (grouping follows the task graph, not domains).',
     fallbackHeuristic:
-      'With no model, clusters follow source/time/learned edges; names use heuristics (never the hostname).',
+      'With no model, only true opener/referrer edges cluster (prefer split over false merges). Same window or nearby open time never hard-merges. Names use heuristics.',
 
     togglesTitle: 'Feature toggles',
     toggleDedupe: 'Exact-URL dedupe jump',
     toggleIgnoreHash: 'Ignore hash when deduping (off = match including hash)',
-    toggleAutoGroup: 'Auto-group by task (source/time first; semantics only refine)',
+    toggleAutoGroup: 'Auto-group by task (model judges same-task; conservative split without a model)',
     toggleQuickSearch: 'Enable quick search (P1, off by default)',
 
     taskViewTitle: 'Task view',

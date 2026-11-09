@@ -1,28 +1,34 @@
 /**
  * 任务导航图 (session/task navigation graph).
  *
- * Build task clusters from:
- *   1. Strong: live openerTabId (tab tree) — never split by topic
- *   2. Strong-medium: referrer / click-source match to another open tab
- *   3. Medium: open-time adjacency (same window, configurable window)
- *   4. Weak learned: durable URL-pattern priors from past opener/time/feedback
- *   5. Model extraUnions (second layer): LLM on short summaries decides
- *      same-project merges. Slug/product keys only propose candidates.
- *   6. Weak semantic: refine only — sub-split mixed WEAK components.
- *      Project regex is NOT a union authority.
+ * Rules form CANDIDATES only (opener, referrer, time adjacency, project path,
+ * learned priors). Same Chrome window and open-time adjacency never hard-merge.
+ *
+ * Conservative unions (no-model fallback, prefer split over false merge):
+ *   1. User session merge / model extraUnions
+ *   2. True navigation opener (tab born with a real destination URL — not Ctrl+T)
+ *   3. document.referrer matching another open tab
+ *
+ * Same-task / same-project judgment is model-first on title + URL + summary.
+ * Project regex is NOT a union authority. Semantic labels name clusters and
+ * only sub-split mixed weak components.
  *
  * Union-find / connected components. Session merge/split overrides are the
  * extension point for user feedback (weights adjusted separately in nav-priors).
  */
 import { LEARNED_UNION_THRESHOLD, TIME_ADJACENCY_MS } from './constants.js';
 import { priorWeight } from './nav-priors.js';
-import { projectDisplayName } from './project-affinity.js';
+import { projectDisplayName, sharesProjectAffinity } from './project-affinity.js';
+import { isEphemeralNewTabUrl } from './url-utils.js';
 
 /**
  * @typedef {{
  *   id: number,
  *   windowId: number,
  *   openerTabId?: number | null,
+ *   openerFromNavigation?: boolean,
+ *   birthUrl?: string,
+ *   pendingUrl?: string,
  *   createdAt?: number,
  *   url?: string,
  *   title?: string,
@@ -87,6 +93,20 @@ export function labelsCompatible(a, b) {
   return na === nb;
 }
 
+/**
+ * True link / window.open / duplicate — not Chrome's tab-strip opener on Ctrl+T.
+ * Missing evidence → not a hard merge (candidate only).
+ * @param {TaskNode | null | undefined} node
+ */
+export function isReliableOpener(node) {
+  if (!node || node.openerTabId == null) return false;
+  if (node.openerFromNavigation === false) return false;
+  if (node.openerFromNavigation === true) return true;
+  const birth = node.birthUrl || node.pendingUrl || '';
+  if (birth) return !isEphemeralNewTabUrl(birth);
+  return false;
+}
+
 /** @param {number} a @param {number} b */
 function pairKey(a, b) {
   return a < b ? `${a}:${b}` : `${b}:${a}`;
@@ -108,9 +128,6 @@ export function buildTaskClusters(nodes, opts = {}) {
   const list = (nodes || []).filter((n) => n && n.id != null);
   const ids = list.map((n) => n.id);
   const byId = new Map(list.map((n) => [n.id, n]));
-  const timeWindowMs = opts.timeWindowMs ?? TIME_ADJACENCY_MS;
-  const learnedThreshold = opts.learnedThreshold ?? LEARNED_UNION_THRESHOLD;
-  const priors = opts.priors || { pairs: {} };
   const sessionMerges = opts.sessionMerges || [];
   const sessionSplits = new Set((opts.sessionSplits || []).map(([a, b]) => pairKey(a, b)));
 
@@ -141,14 +158,15 @@ export function buildTaskClusters(nodes, opts = {}) {
     tryUnion(a, b, 'model', true);
   }
 
-  // 1) Strong opener (tab tree). Cross-window OK when lineage recorded openerTabId.
+  // 1) True navigation opener only. Chrome tab-strip opener (Ctrl+T / New Tab)
+  // is a candidate for the model, never a conservative hard-merge.
   for (const n of list) {
-    if (n.openerTabId != null) {
+    if (isReliableOpener(n)) {
       tryUnion(n.id, n.openerTabId, 'opener', true);
     }
   }
 
-  // 2) Referrer / click source → another open tab (when openerTabId missing)
+  // 2) True referrer / click-source → another open tab (document.referrer).
   for (const n of list) {
     const ref = (n.referrerUrl || '').trim();
     if (!ref) continue;
@@ -160,33 +178,8 @@ export function buildTaskClusters(nodes, opts = {}) {
     }
   }
 
-  // Project slug / path / loopback are NOT union keys (model + opener/time/feedback only).
-
-  // 3) Medium: time adjacency, same window, labels compatible
-  for (let i = 0; i < list.length; i++) {
-    for (let j = i + 1; j < list.length; j++) {
-      const a = list[i];
-      const b = list[j];
-      if (a.windowId !== b.windowId) continue;
-      if (a.createdAt == null || b.createdAt == null) continue;
-      if (Math.abs(a.createdAt - b.createdAt) > timeWindowMs) continue;
-      if (!labelsCompatible(a.semanticLabel, b.semanticLabel)) continue;
-      tryUnion(a.id, b.id, 'time', false);
-    }
-  }
-
-  // 5) Weak learned priors — future similar navigations
-  for (let i = 0; i < list.length; i++) {
-    for (let j = i + 1; j < list.length; j++) {
-      const a = list[i];
-      const b = list[j];
-      if (!labelsCompatible(a.semanticLabel, b.semanticLabel)) continue;
-      const w = priorWeight(priors, a.url, b.url);
-      if (w >= learnedThreshold) {
-        tryUnion(a.id, b.id, 'learned', false);
-      }
-    }
-  }
+  // Time adjacency, same window, learned priors, and project slug/path are
+  // NEVER union keys. collectRuleCandidates() exposes them as model hints.
 
   // Semantic is NOT a union key. Sub-split weak-only components with mixed topics.
   /** @type {Map<number, number[]>} */
@@ -206,6 +199,71 @@ export function buildTaskClusters(nodes, opts = {}) {
   return refined
     .map((memberIds, idx) => toCluster(memberIds, idx, byId, usedEdges))
     .sort((a, b) => b.tabIds.length - a.tabIds.length || a.id.localeCompare(b.id));
+}
+
+/**
+ * Weak same-task hints for the model. Never a merge decision.
+ * @param {TaskNode[]} nodes
+ * @param {{
+ *   timeWindowMs?: number,
+ *   learnedThreshold?: number,
+ *   priors?: { pairs?: Record<string, { weight?: number }> },
+ *   sessionSplits?: [number, number][],
+ * }} [opts]
+ * @returns {{ a: number, b: number, kind: string }[]}
+ */
+export function collectRuleCandidates(nodes, opts = {}) {
+  const list = (nodes || []).filter((n) => n && n.id != null);
+  const timeWindowMs = opts.timeWindowMs ?? TIME_ADJACENCY_MS;
+  const learnedThreshold = opts.learnedThreshold ?? LEARNED_UNION_THRESHOLD;
+  const priors = opts.priors || { pairs: {} };
+  const sessionSplits = new Set((opts.sessionSplits || []).map(([a, b]) => pairKey(a, b)));
+  /** @type {{ a: number, b: number, kind: string }[]} */
+  const pairs = [];
+  const seen = new Set();
+
+  const add = (a, b, kind) => {
+    if (a == null || b == null || a === b) return;
+    if (sessionSplits.has(pairKey(a, b))) return;
+    const key = `${pairKey(a, b)}:${kind}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    pairs.push({ a: a < b ? a : b, b: a < b ? b : a, kind });
+  };
+
+  for (const n of list) {
+    if (n.openerTabId == null) continue;
+    if (!list.some((other) => other.id === n.openerTabId)) continue;
+    add(n.id, n.openerTabId, isReliableOpener(n) ? 'opener' : 'opener-weak');
+  }
+
+  for (const n of list) {
+    const ref = (n.referrerUrl || '').trim();
+    if (!ref) continue;
+    for (const other of list) {
+      if (other.id === n.id) continue;
+      if ((other.url || '') === ref) add(n.id, other.id, 'referrer');
+    }
+  }
+
+  for (let i = 0; i < list.length; i++) {
+    for (let j = i + 1; j < list.length; j++) {
+      const a = list[i];
+      const b = list[j];
+      if (
+        a.windowId === b.windowId &&
+        a.createdAt != null &&
+        b.createdAt != null &&
+        Math.abs(a.createdAt - b.createdAt) <= timeWindowMs
+      ) {
+        add(a.id, b.id, 'time');
+      }
+      if (sharesProjectAffinity(a.url, b.url)) add(a.id, b.id, 'project');
+      if (priorWeight(priors, a.url, b.url) >= learnedThreshold) add(a.id, b.id, 'learned');
+    }
+  }
+
+  return pairs;
 }
 
 /**
