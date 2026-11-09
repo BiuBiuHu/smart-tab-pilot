@@ -1,9 +1,10 @@
 /**
- * Second-layer same-group judgment on short tab summaries.
- * Slug / product keys only propose candidates. The model (or opener/time/feedback)
- * decides. Regex is never a merge authority.
+ * Model-first same-group judgment on short tab summaries.
+ * Rules (opener / referrer / time / project / learned) only propose candidates.
+ * Regex is never a merge authority. Window / open-time never decide.
  */
 import { slugsRelated } from './project-affinity.js';
+import { isReliableOpener } from './task-graph.js';
 
 const HINT_STOP = new Set([
   'http', 'https', 'html', 'index', 'page', 'pages', 'www', 'com', 'net', 'org',
@@ -54,10 +55,25 @@ function clusterHintBlob(cluster, summariesByTab, nodesById) {
   return bits.join(' ');
 }
 
-export function proposeCandidatePairs(clusters, summariesByTab, nodesById) {
+export function proposeCandidatePairs(clusters, summariesByTab, nodesById, rulePairs) {
   const list = clusters || [];
-  /** @type {{ a: string, b: string, productKey: string }[]} */
+  /** @type {{ a: string, b: string, productKey: string, reason?: string }[]} */
   const pairs = [];
+  const seen = new Set();
+
+  const add = (a, b, productKey, reason) => {
+    if (!a || !b || a === b) return;
+    const key = a < b ? `${a}::${b}` : `${b}::${a}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    pairs.push({
+      a: a < b ? a : b,
+      b: a < b ? b : a,
+      productKey,
+      ...(reason ? { reason } : {}),
+    });
+  };
+
   for (let i = 0; i < list.length; i++) {
     for (let j = i + 1; j < list.length; j++) {
       const ka = clusterProductKeys(list[i], summariesByTab);
@@ -77,7 +93,20 @@ export function proposeCandidatePairs(clusters, summariesByTab, nodesById) {
         const tb = lexicalHintTokens(clusterHintBlob(list[j], summariesByTab, nodesById));
         hit = tb.find((t) => ta.has(t)) || '';
       }
-      if (hit) pairs.push({ a: list[i].id, b: list[j].id, productKey: hit });
+      if (hit) add(list[i].id, list[j].id, hit, 'lexical');
+    }
+  }
+
+  if (rulePairs?.length) {
+    const clusterOfTab = new Map();
+    for (const c of list) {
+      for (const id of c.tabIds || []) clusterOfTab.set(id, c.id);
+    }
+    for (const p of rulePairs) {
+      const ca = clusterOfTab.get(p.a);
+      const cb = clusterOfTab.get(p.b);
+      if (!ca || !cb || ca === cb) continue;
+      add(ca, cb, p.kind || 'rule', p.kind || 'rule');
     }
   }
   return pairs;
@@ -87,8 +116,9 @@ export function proposeCandidatePairs(clusters, summariesByTab, nodesById) {
  * @param {import('./task-graph.js').TaskCluster[]} clusters
  * @param {Map<number, import('./tab-summary.js').TabSummary | null | undefined>} summariesByTab
  * @param {Map<number, import('./task-graph.js').TaskNode> | undefined} nodesById
+ * @param {{ a: number, b: number, kind: string }[]} [rulePairs]
  */
-export function buildJudgePayload(clusters, summariesByTab, nodesById) {
+export function buildJudgePayload(clusters, summariesByTab, nodesById, rulePairs) {
   const items = (clusters || []).map((c) => ({
     id: c.id,
     label: c.label,
@@ -104,7 +134,7 @@ export function buildJudgePayload(clusters, summariesByTab, nodesById) {
         if (!title && !url && !intro) return null;
         const nav = [];
         if (n?.referrerUrl) nav.push(`referrer ${n.referrerUrl}`);
-        if (n?.openerTabId != null) nav.push(`openerTab ${n.openerTabId}`);
+        if (isReliableOpener(n)) nav.push(`openerTab ${n.openerTabId}`);
         return {
           tabId: id,
           title,
@@ -120,7 +150,7 @@ export function buildJudgePayload(clusters, summariesByTab, nodesById) {
   }));
   return {
     clusters: items,
-    candidates: proposeCandidatePairs(clusters, summariesByTab, nodesById),
+    candidates: proposeCandidatePairs(clusters, summariesByTab, nodesById, rulePairs),
   };
 }
 
@@ -180,12 +210,13 @@ export function applyModelJudgment(nodes, clusters, judgment, buildOpts, build) 
 export function formatJudgeUserPrompt(payload) {
   const lines = [];
   lines.push(
-    'Decide from title + full URL + intro. Slugs are hints only. Cross-window is not a split reason.',
+    'Decide from title + full URL + intro. Slugs, opener, referrer, window, and open-time are hints only. Same window or nearby open time is not a merge. Cross-window is not a split reason.',
   );
   if (payload.candidates?.length) {
     lines.push('Candidate cluster pairs (not a decision):');
     for (const p of payload.candidates) {
-      lines.push(`  ${p.a} ↔ ${p.b}  hint=${p.productKey}`);
+      const reason = p.reason ? `  reason=${p.reason}` : '';
+      lines.push(`  ${p.a} ↔ ${p.b}  hint=${p.productKey}${reason}`);
     }
   }
   for (const c of payload.clusters || []) {

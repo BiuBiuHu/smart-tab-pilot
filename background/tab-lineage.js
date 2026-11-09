@@ -4,6 +4,7 @@
  * Survives service-worker restarts via chrome.storage.session.
  */
 import { SESSION_LINEAGE_KEY } from '../shared/constants.js';
+import { isEphemeralNewTabUrl } from '../shared/url-utils.js';
 
 /**
  * @typedef {{
@@ -14,6 +15,8 @@ import { SESSION_LINEAGE_KEY } from '../shared/constants.js';
  *   url: string,
  *   pendingUrl: string,
  *   referrerUrl: string,
+ *   birthUrl: string,
+ *   openerFromNavigation: boolean,
  * }} LineageRecord
  */
 
@@ -68,6 +71,8 @@ function normalizeRecord(raw) {
     url: raw.url || '',
     pendingUrl: raw.pendingUrl || '',
     referrerUrl: raw.referrerUrl || '',
+    birthUrl: raw.birthUrl || '',
+    openerFromNavigation: raw.openerFromNavigation === true,
   };
 }
 
@@ -86,6 +91,13 @@ export function rememberTab(tab, opts = {}) {
   }
   const url = tab.url || prev?.url || '';
   const pendingUrl = tab.pendingUrl || prev?.pendingUrl || '';
+  const dest = (tab.pendingUrl || tab.url || '').trim();
+  let birthUrl = prev?.birthUrl || '';
+  let openerFromNavigation = prev?.openerFromNavigation === true;
+  if (opts.created) {
+    birthUrl = dest;
+    openerFromNavigation = Boolean(dest) && !isEphemeralNewTabUrl(dest);
+  }
   const rec = normalizeRecord({
     openerTabId,
     openerUrl,
@@ -94,6 +106,8 @@ export function rememberTab(tab, opts = {}) {
     url: url || pendingUrl,
     pendingUrl,
     referrerUrl: prev?.referrerUrl || '',
+    birthUrl,
+    openerFromNavigation,
   });
   lineage.set(tab.id, rec);
   persistSoon();
@@ -143,7 +157,9 @@ export function attachLineage(tabs) {
       url: t.url || rec?.url || t.pendingUrl || rec?.pendingUrl || '',
       openerTabId: t.openerTabId != null ? t.openerTabId : rec?.openerTabId ?? null,
       createdAt: rec?.createdAt || undefined,
-      referrerUrl: rec?.referrerUrl || rec?.openerUrl || '',
+      referrerUrl: rec?.referrerUrl || '',
+      birthUrl: rec?.birthUrl || '',
+      openerFromNavigation: rec?.openerFromNavigation === true,
     };
   });
 }

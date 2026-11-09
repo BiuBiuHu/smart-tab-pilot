@@ -7,6 +7,27 @@ export function shouldSkipUrl(url) {
 }
 
 /**
+ * Chrome/Edge new-tab / blank destinations. A tab born here was not opened
+ * via link navigation — Chrome may still set openerTabId to the previous tab.
+ * @param {string | undefined} url
+ */
+export function isEphemeralNewTabUrl(url) {
+  const raw = (url || '').trim();
+  if (!raw) return true;
+  let href = raw;
+  try {
+    href = new URL(raw).href;
+  } catch {
+    href = raw;
+  }
+  const u = href.toLowerCase();
+  if (u === 'about:blank' || u === 'about:newtab' || u === 'about:newtab/') return true;
+  if (u.startsWith('chrome://newtab') || u.startsWith('chrome://new-tab-page')) return true;
+  if (u.startsWith('edge://newtab') || u.startsWith('brave://newtab')) return true;
+  return false;
+}
+
+/**
  * Normalize URL for exact-dedupe comparison.
  * Keeps pathname/search exact (including trailing slash). Hash stripped only when ignoreHash.
  * @param {string} url

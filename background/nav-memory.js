@@ -76,7 +76,7 @@ export async function recordClosePriors(tabId) {
   const now = Date.now();
 
   const openerUrl = rec.openerUrl || (rec.openerTabId != null ? getLineage(rec.openerTabId)?.url : '');
-  if (openerUrl) {
+  if (openerUrl && rec.openerFromNavigation) {
     store = bumpPrior(store, openerUrl, rec.url, {
       source: 'opener',
       delta: EDGE_WEIGHT.LEARNED_OPENER_DELTA,

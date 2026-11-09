@@ -25,6 +25,8 @@ function tab(partial) {
     summary: partial.summary,
     referrerUrl: partial.referrerUrl,
     openerTabId: partial.openerTabId,
+    openerFromNavigation: partial.openerFromNavigation,
+    createdAt: partial.createdAt,
   };
 }
 
@@ -186,6 +188,7 @@ const BETTR_TABS = [
     semanticLabel: 'Bettr Promotion',
     intro: 'Unio 环境的 Bettr Promotion 工作台。',
     openerTabId: 101,
+    openerFromNavigation: true,
   },
   {
     id: 103,
@@ -294,6 +297,8 @@ describe('SAME_GROUP_SYSTEM_PROMPT + screenshot judge simulation', () => {
     assert.match(SAME_GROUP_SYSTEM_PROMPT, /BETTR|Bettr/);
     assert.match(SAME_GROUP_SYSTEM_PROMPT, /HINTS only|hints only/i);
     assert.match(SAME_GROUP_SYSTEM_PROMPT, /two jobs|keep them separate/i);
+    assert.match(SAME_GROUP_SYSTEM_PROMPT, /share a Chrome window|opened around the same time/i);
+    assert.match(SAME_GROUP_SYSTEM_PROMPT, /Independently opened/i);
   });
 
   it('rules do not hard-merge yuque docs with Bettr consoles (slug is not authority)', () => {
@@ -322,6 +327,7 @@ describe('SAME_GROUP_SYSTEM_PROMPT + screenshot judge simulation', () => {
     }
     assert.match(userPrompt, /nav: openerTab 101/);
     assert.match(userPrompt, /Decide from title \+ full URL \+ intro/);
+    assert.match(userPrompt, /Same window or nearby open time is not a merge/);
     assert.ok(!userPrompt.includes('BODY'));
     const hinted = proposeCandidatePairs(
       payload.clusters.map((c) => ({ id: c.id, tabIds: c.tabIds, label: c.label })),
@@ -391,6 +397,115 @@ describe('SAME_GROUP_SYSTEM_PROMPT + screenshot judge simulation', () => {
       .find((s) => s.tabId === 301);
     assert.ok(duty);
     assert.ok(!/bettr|promotion|信贷/i.test(`${duty.title} ${duty.intro}`));
+  });
+});
+
+describe('model-first batch judgment — independent vs product tabs', () => {
+  const t0 = 2_000_000;
+
+  it('keeps independently opened same-window tabs split; model can still join product-path tabs', () => {
+    const nodes = [
+      tab({
+        id: 11,
+        windowId: 1,
+        url: 'https://bettr-promotion-dev-unio.page.alipay.net/page/home',
+        title: 'bettr-promotion-dev-unio',
+        semanticLabel: 'Unio',
+        createdAt: t0,
+        summary: buildTabSummary({
+          title: 'bettr-promotion-dev-unio',
+          url: 'https://bettr-promotion-dev-unio.page.alipay.net/page/home',
+          text: 'Unio 环境的 Bettr Promotion 工作台。',
+        }),
+      }),
+      tab({
+        id: 12,
+        windowId: 1,
+        url: 'https://www.marmot-cloud.com/bettr/bettr-promotion/console',
+        title: 'bettr-promotion · Marmot',
+        semanticLabel: 'Marmot',
+        createdAt: t0 + 6_000,
+        summary: buildTabSummary({
+          title: 'bettr-promotion · Marmot',
+          url: 'https://www.marmot-cloud.com/bettr/bettr-promotion/console',
+          text: 'Marmot 控制台，Bettr Promotion 运营。',
+        }),
+      }),
+      tab({
+        id: 21,
+        windowId: 1,
+        openerTabId: 11,
+        openerFromNavigation: false,
+        url: 'https://chat.example.com/c/seo-draft',
+        title: '搭建SEO内容工作台',
+        semanticLabel: '写作',
+        createdAt: t0 + 10_000,
+        summary: buildTabSummary({
+          title: '搭建SEO内容工作台',
+          url: 'https://chat.example.com/c/seo-draft',
+          text: '独立打开的写作会话，与投放控制台无关。',
+        }),
+      }),
+      tab({
+        id: 22,
+        windowId: 1,
+        openerTabId: 11,
+        openerFromNavigation: false,
+        url: 'https://licenses.example.org/by/4.0/',
+        title: 'License deed',
+        semanticLabel: '许可协议',
+        createdAt: t0 + 18_000,
+        summary: buildTabSummary({
+          title: 'License deed',
+          url: 'https://licenses.example.org/by/4.0/',
+          text: 'Creative Commons 许可文本，独立打开。',
+        }),
+      }),
+      tab({
+        id: 23,
+        windowId: 1,
+        openerTabId: 11,
+        openerFromNavigation: false,
+        url: 'https://ops.corp.example.net/env/5987128',
+        title: 'Env dashboard',
+        semanticLabel: '环境',
+        createdAt: t0 + 24_000,
+        summary: buildTabSummary({
+          title: 'Env dashboard',
+          url: 'https://ops.corp.example.net/env/5987128',
+          text: '通用环境管理页，不是投放产品控制台。',
+        }),
+      }),
+    ];
+
+    const { clusters, payload, next } = simulateJudge(nodes, '{"merges":[[11,12]]}');
+    assert.equal(clusters.length, 5, 'rules must not suck independent tabs into the product task');
+    const product = clusters.find((c) => c.tabIds.includes(11));
+    assert.ok(product);
+    assert.equal(product.tabIds.includes(21), false);
+    assert.equal(product.tabIds.includes(22), false);
+    assert.equal(product.tabIds.includes(23), false);
+    assert.ok(payload.candidates.length >= 1);
+    assert.ok(
+      payload.clusters.flatMap((c) => c.summaries).every((s) => s.title && s.url),
+    );
+    const independentNav = payload.clusters
+      .flatMap((c) => c.summaries)
+      .filter((s) => [21, 22, 23].includes(s.tabId))
+      .map((s) => s.nav || '');
+    assert.equal(
+      independentNav.some((nav) => /openerTab/.test(nav)),
+      false,
+      'Chrome tab-strip opener must not be sent as a navigation fact',
+    );
+
+    assert.equal(next.length, 4);
+    const joined = next.find((c) => c.tabIds.includes(11) && c.tabIds.includes(12));
+    assert.ok(joined);
+    assert.deepEqual(joined.tabIds.slice().sort((a, b) => a - b), [11, 12]);
+    assert.ok(next.some((c) => c.tabIds.length === 1 && c.tabIds[0] === 21));
+    assert.ok(next.some((c) => c.tabIds.length === 1 && c.tabIds[0] === 22));
+    assert.ok(next.some((c) => c.tabIds.length === 1 && c.tabIds[0] === 23));
   });
 });
 

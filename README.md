@@ -7,7 +7,7 @@
 
 **Exact URL dedupe with cross-window jump**, plus a **task navigation graph** that groups tabs by how you actually navigated — not by hostname. The UI lives in Chrome’s **side panel**. Naming and mixed-cluster refinement prefer on-device Gemini Nano, then a custom OpenAI-compatible endpoint, then local heuristics.
 
-中文：跨窗口精确 URL 去重跳转，再用任务导航图按来源 / 时间归组（语义只负责精炼与命名）。侧边栏操作；模型顺序为 Nano → 自定义 OpenAI 兼容接口 → 启发式。
+中文：跨窗口精确 URL 去重跳转，再用任务导航图按真实来源归组（规则只出候选，模型根据标题+URL+短摘要判断是否同一任务；同窗口/开页时间不会硬合并）。侧边栏操作；模型顺序为 Nano → 自定义 OpenAI 兼容接口 → 启发式。
 
 Available on the [Chrome Web Store](https://chromewebstore.google.com/detail/smart-tab-pilot/acnhnhllaloccmnmdjcgmkmpbkpdegfd) (v1.5.0, listed 2026-11-05). Load unpacked from this repository for development. Privacy policy: [https://biubiuhu.github.io/smart-tab-pilot/chrome-web-store/privacy.html](https://biubiuhu.github.io/smart-tab-pilot/chrome-web-store/privacy.html).
 
@@ -28,7 +28,7 @@ Watch the ~28s product tour on the [GitHub Pages homepage](https://biubiuhu.gith
 ## Features
 
 - **Exact URL dedupe** — If any window already has the same URL, Smart Tab Pilot focuses that window, activates the existing tab, and closes the duplicate. Default match includes the hash (`ignoreHash` is off). Internal pages (`chrome://`, `chrome-extension://`, `about:`, `edge://`, …) are skipped.
-- **Task navigation graph** — Groups by opener tree, `document.referrer`, nearby same-window opens, and learned origin+path priors. Semantics refine names and mixed clusters; **same hostname does not force a merge**. Cross-window work stays one logical task; Chrome `tabGroups` are still written per window.
+- **Task navigation graph** — Rules (true opener / referrer / time / project path) only propose candidates. **Same-task judgment is model-first** on each tab’s title + URL + short summary. Same window or nearby open time never hard-merges. Without a model, only true navigation opener/referrer cluster (prefer split over false merges). **Same hostname does not force a merge**. Cross-window work stays one logical task; Chrome `tabGroups` are still written per window.
 - **Side panel UI** — Click the toolbar icon (or the shortcut) to fill the browser side panel. There is no action popup.
 - **Settings as its own view** — Language, Nano status, custom model fields, and feature toggles live on a separate settings page inside the panel — the task list stays the main surface.
 - **Window scope** — Toggle **All windows** / **Current window only**. The choice is saved.
@@ -86,7 +86,7 @@ Settings is a **separate panel view** (gear in the header → back to the task l
 - Needs a recent Chrome that exposes the [Prompt API](https://developer.chrome.com/docs/ai/prompt-api) `LanguageModel`.
 - Some environments require experiment flags and permission to download the on-device model.
 - Availability is checked with the same options as `create` / `prompt`.
-- If Nano is unavailable, configure a custom endpoint or rely on heuristics. Grouping still follows the navigation graph.
+- If Nano is unavailable, configure a custom endpoint or rely on heuristics. Grouping still follows conservative navigation edges (true opener/referrer); the model is what judges same-project merges.
 
 ## Development
 

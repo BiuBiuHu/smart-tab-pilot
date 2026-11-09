@@ -16,7 +16,7 @@ Smart Tab Pilot keeps your Chrome windows tidy without grouping tabs by website.
 If you open a URL that is already open in any window, the existing tab is focused and the duplicate is closed. Matching includes the hash by default; you can ignore the hash in Settings.
 
 **Task navigation graph**
-Tabs are clustered by how you actually navigated: opener tree, referrer, nearby opens in the same window, and optional learned URL-pattern priors. Page semantics refine names and mixed clusters — they do not glue everything from the same hostname together.
+Tabs are clustered by real navigation and model judgment: true opener/referrer edges, then an optional model that reads each tab’s title + URL + short summary. Same window or nearby open time never forces a merge. Page semantics refine names — they do not glue everything from the same hostname together.
 
 **Side panel**
 Click the toolbar icon (or Ctrl+Shift+K / ⌘⇧K) to open a full side panel: task cards, drag-to-merge, split, close a whole logical group, all-windows vs this-window, and Settings.
@@ -27,7 +27,7 @@ Chinese and English. Default follows the browser; you can lock 中文 or English
 **Optional models**
 - Prefer on-device Gemini Nano (Chrome Prompt API) to name tasks and judge same-project tabs.
 - If Nano is unavailable, you may set an OpenAI-compatible **Base URL, API key, and model name**. That endpoint is **your URL**. The extension does not ship a vendor backend.
-- With no model, grouping still follows the navigation graph; names fall back to heuristics.
+- With no model, only true opener/referrer edges cluster (prefer split over false merges); names fall back to heuristics.
 
 **What it does not do**
 - Does not merge tabs just because they share a domain.

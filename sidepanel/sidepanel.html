@@ -12,7 +12,7 @@
       <div class="header-row">
         <div class="header-text">
           <h1>Smart Tab Pilot</h1>
-          <p class="subtitle" data-i18n="subtitle">精确去重 · 任务导航图（来源优先，语义精炼）</p>
+          <p class="subtitle" data-i18n="subtitle">精确去重 · 任务导航图（规则出候选，模型判断同一任务）</p>
         </div>
         <button
           id="btn-settings"
@@ -109,7 +109,7 @@
           </label>
           <label class="toggle">
             <input type="checkbox" id="toggle-auto-group" />
-            <span data-i18n="toggleAutoGroup">自动按任务归组（来源/时间优先，语义只作精炼）</span>
+            <span data-i18n="toggleAutoGroup">自动按任务归组（模型判断是否同一任务；无模型时保守拆开）</span>
           </label>
           <label class="toggle">
             <input type="checkbox" id="toggle-quick-search" />

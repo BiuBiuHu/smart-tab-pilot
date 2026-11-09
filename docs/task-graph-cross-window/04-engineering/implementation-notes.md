@@ -29,21 +29,20 @@ nodes = tabs + lineage + semanticLabel
 UF = {}
 
 union sessionMerges          // 用户反馈
-union extraUnions            // 模型同组（权威第二层，只加并；slug 不是权威）
-union openerTabId            // 强：标签树，可跨窗（lineage）
-union referrer → 打开中 URL  // 强-中：点击来源
-// product key / loopback / prefix = candidate features ONLY
-union time-adjacent          // 中：同窗 + createdAt 差 ≤ 45s + 主题兼容
-union learned prior ≥ 0.35   // 弱：历史 opener/时间/反馈
+union extraUnions            // 模型同组（权威判断层，只加并）
+union reliable opener        // 仅真实导航 opener（tab 出生即带目标 URL，非 Ctrl+T）
+union referrer → 打开中 URL  // document.referrer 命中
+// time / same-window / learned / project slug = CANDIDATES ONLY
 forbid sessionSplits
 
+model judges remaining candidate pairs from title + full URL + short summary
 if 弱簇主题混杂 and 无强边跨主题: split by topic
 label = projectDisplayName || majority semantic topic
 persist tabSummary(title, path/slug, 1–2句)  // 永不落盘全文
 physical = coalesce by (windowId, normalize(label)) → 一窗一名一组
 ```
 
-Chrome `tabs.Tab` **没有** `createdAt`，时间边只使用本扩展观察到的 `onCreated`。
+Chrome `tabs.Tab` **没有** `createdAt`。时间邻接只作为模型候选，不再 hard-merge。无模型时宁可拆开。
 
 ## 3. 学习如何变强
 
@@ -78,7 +77,7 @@ Chrome `tabs.Tab` **没有** `createdAt`，时间边只使用本扩展观察到�
 npm test
 ```
 
-覆盖：opener 混主题仍一团、同域不同主题拆开、时间+冲突主题不并、学习边、反馈 merge/split、跨窗 URL 匹配、浅模式拒绝、Bettr 项目亲和、短摘要不落盘正文、同窗同名物理组合并、侧栏拖拽任意任务/标签合并（含 HTML5 dataTransfer 仿真与学习 +0.35）、模型同组入参（标题+完整 URL+短摘要+nav）以及截图场景（Bettr Promotion × 语雀）的脚本化 judge 合并/拆分、关闭本组（跨窗/仅当前窗/已关闭 tab/会话边清理）、设置面板开合与模型字段位置。
+覆盖：真实 opener 混主题仍一团、同窗独立打开的无关标签不并、时间/学习边只做候选不硬并、反馈 merge/split、跨窗 URL 匹配、浅模式拒绝、Bettr 项目亲和（模型可并、regex 不硬并）、短摘要不落盘正文、同窗同名物理组合并、侧栏拖拽任意任务/标签合并（含 HTML5 dataTransfer 仿真与学习 +0.35）、模型同组入参（标题+完整 URL+短摘要+nav）以及截图场景（Bettr Promotion × 语雀）的脚本化 judge 合并/拆分、关闭本组（跨窗/仅当前窗/已关闭 tab/会话边清理）、设置面板开合与模型字段位置。
 
 ## 7. 本环境无法远程验证的部分
 
