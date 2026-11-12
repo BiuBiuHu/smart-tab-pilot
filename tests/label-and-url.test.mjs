@@ -9,20 +9,38 @@ import {
   rejectDomainishLabel,
   sanitizeLabel,
 } from '../shared/label-utils.js';
-import { isEphemeralNewTabUrl, normalizeUrl, shouldSkipUrl } from '../shared/url-utils.js';
+import {
+  coalesceExactUrl,
+  exactUrlIdentity,
+  isEphemeralNewTabUrl,
+  normalizeUrl,
+  shouldSkipUrl,
+} from '../shared/url-utils.js';
 
-describe('normalizeUrl', () => {
-  it('keeps hash by default', () => {
+describe('exactUrlIdentity / normalizeUrl', () => {
+  it('keeps hash and never strips it', () => {
+    assert.equal(exactUrlIdentity('https://example.com/a#x'), 'https://example.com/a#x');
     assert.equal(
-      normalizeUrl('https://example.com/a#x'),
+      normalizeUrl('https://example.com/a#x', { ignoreHash: true }),
       'https://example.com/a#x',
     );
   });
-  it('strips hash when ignoreHash', () => {
+  it('keeps query strings and does not sort params', () => {
     assert.equal(
-      normalizeUrl('https://example.com/a#x', { ignoreHash: true }),
-      'https://example.com/a',
+      exactUrlIdentity('https://example.com/p?b=2&a=1'),
+      'https://example.com/p?b=2&a=1',
     );
+    assert.notEqual(
+      exactUrlIdentity('https://example.com/p?b=2&a=1'),
+      exactUrlIdentity('https://example.com/p?a=1&b=2'),
+    );
+  });
+  it('treats empty vs present hash/query as different identities', () => {
+    const base = exactUrlIdentity('https://example.com/p');
+    assert.notEqual(base, exactUrlIdentity('https://example.com/p#'));
+    assert.notEqual(base, exactUrlIdentity('https://example.com/p?'));
+    assert.notEqual(base, exactUrlIdentity('https://example.com/p?a=1'));
+    assert.notEqual(base, exactUrlIdentity('https://example.com/p#x'));
   });
   it('keeps trailing slash difference (exact)', () => {
     assert.notEqual(
@@ -32,6 +50,25 @@ describe('normalizeUrl', () => {
   });
   it('returns empty for empty input', () => {
     assert.equal(normalizeUrl(''), '');
+  });
+});
+
+describe('coalesceExactUrl', () => {
+  it('fills a Chrome-stripped fragment when origin+path+query match', () => {
+    assert.equal(
+      coalesceExactUrl('https://example.com/p', 'https://example.com/p#install'),
+      'https://example.com/p#install',
+    );
+    assert.equal(
+      coalesceExactUrl('https://example.com/p?a=1', 'https://example.com/p?a=1#x'),
+      'https://example.com/p?a=1#x',
+    );
+  });
+  it('does not copy a hash across different query strings', () => {
+    assert.equal(
+      coalesceExactUrl('https://example.com/p?q=new', 'https://example.com/p?q=old#x'),
+      'https://example.com/p?q=new',
+    );
   });
 });
 

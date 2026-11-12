@@ -13,7 +13,7 @@ Character count: 120
 Smart Tab Pilot keeps your Chrome windows tidy without grouping tabs by website.
 
 **Exact URL dedupe (cross-window)**
-If you open a URL that is already open in any window, the existing tab is focused and the duplicate is closed. Matching includes the hash by default; you can ignore the hash in Settings.
+If you open a URL that is already open in any window, the existing tab is focused and the duplicate is closed. The full URL must match: path, query string, and hash. Different params or fragments are different pages.
 
 **Task navigation graph**
 Tabs are clustered by real navigation and model judgment: true opener/referrer edges, then an optional model that reads each tab’s title + URL + short summary. Same window or nearby open time never forces a merge. Page semantics refine names — they do not glue everything from the same hostname together.

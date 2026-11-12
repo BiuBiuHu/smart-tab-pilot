@@ -56,8 +56,7 @@ export const MESSAGES = {
       '无可用模型时，只保留真实点击来源/引用（宁可拆开也不误并）；同窗口或开页时间相近不会硬合并。主题名用启发式。',
 
     togglesTitle: '功能开关',
-    toggleDedupe: '精确 URL 去重跳转',
-    toggleIgnoreHash: '去重时忽略 hash（默认关闭＝含 hash 精确匹配）',
+    toggleDedupe: '精确 URL 去重跳转（含 path / query / hash）',
     toggleAutoGroup: '自动按任务归组（模型判断是否同一任务；无模型时保守拆开）',
     toggleQuickSearch: '启用快速搜索（P1，默认关闭）',
 
@@ -186,8 +185,7 @@ export const MESSAGES = {
       'With no model, only true opener/referrer edges cluster (prefer split over false merges). Same window or nearby open time never hard-merges. Names use heuristics.',
 
     togglesTitle: 'Feature toggles',
-    toggleDedupe: 'Exact-URL dedupe jump',
-    toggleIgnoreHash: 'Ignore hash when deduping (off = match including hash)',
+    toggleDedupe: 'Exact-URL dedupe jump (path, query, and hash)',
     toggleAutoGroup: 'Auto-group by task (model judges same-task; conservative split without a model)',
     toggleQuickSearch: 'Enable quick search (P1, off by default)',
 

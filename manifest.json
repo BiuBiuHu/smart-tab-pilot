@@ -10,7 +10,8 @@
     "scripting",
     "storage",
     "sessions",
-    "sidePanel"
+    "sidePanel",
+    "webNavigation"
   ],
   "host_permissions": [
     "<all_urls>"

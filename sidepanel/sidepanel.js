@@ -26,7 +26,6 @@ const nanoStatusEl = $('nano-status');
 const nanoDetailEl = $('nano-detail');
 const btnDownload = $('btn-download-nano');
 const toggleDedupe = $('toggle-dedupe');
-const toggleIgnoreHash = $('toggle-ignore-hash');
 const toggleAutoGroup = $('toggle-auto-group');
 const toggleQuickSearch = $('toggle-quick-search');
 const searchCard = $('search-card');
@@ -108,9 +107,6 @@ function bind() {
   btnDownload.addEventListener('click', onDownloadNano);
   toggleDedupe.addEventListener('change', () =>
     savePartial({ exactDedupeEnabled: toggleDedupe.checked }),
-  );
-  toggleIgnoreHash.addEventListener('change', () =>
-    savePartial({ ignoreHash: toggleIgnoreHash.checked }),
   );
   toggleAutoGroup.addEventListener('change', () =>
     savePartial({ autoSemanticGroupEnabled: toggleAutoGroup.checked }),
@@ -472,7 +468,6 @@ async function loadSettings() {
   const res = await send(MSG.GET_SETTINGS);
   const s = res?.settings || {};
   toggleDedupe.checked = s.exactDedupeEnabled !== false;
-  toggleIgnoreHash.checked = s.ignoreHash === true;
   toggleAutoGroup.checked = s.autoSemanticGroupEnabled !== false;
   toggleQuickSearch.checked = s.quickSearchEnabled === true;
   allWindowsView = s.allWindowsViewEnabled !== false;

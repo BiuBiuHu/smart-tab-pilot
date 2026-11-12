@@ -27,7 +27,7 @@ Watch the ~28s product tour on the [GitHub Pages homepage](https://biubiuhu.gith
 
 ## Features
 
-- **Exact URL dedupe** — If any window already has the same URL, Smart Tab Pilot focuses that window, activates the existing tab, and closes the duplicate. Default match includes the hash (`ignoreHash` is off). Internal pages (`chrome://`, `chrome-extension://`, `about:`, `edge://`, …) are skipped.
+- **Exact URL dedupe** — If any window already has the **same full URL** (path + query string + hash), Smart Tab Pilot focuses that window, activates the existing tab, and closes the duplicate. Different query params or fragments are different pages. Internal pages (`chrome://`, `chrome-extension://`, `about:`, `edge://`, …) are skipped.
 - **Task navigation graph** — Rules (true opener / referrer / time / project path) only propose candidates. **Same-task judgment is model-first** on each tab’s title + URL + short summary. Same window or nearby open time never hard-merges. Without a model, only true navigation opener/referrer cluster (prefer split over false merges). **Same hostname does not force a merge**. Cross-window work stays one logical task; Chrome `tabGroups` are still written per window.
 - **Side panel UI** — Click the toolbar icon (or the shortcut) to fill the browser side panel. There is no action popup.
 - **Settings as its own view** — Language, Nano status, custom model fields, and feature toggles live on a separate settings page inside the panel — the task list stays the main surface.
@@ -75,7 +75,7 @@ After you edit source files, click **Reload** on `chrome://extensions`.
 Settings is a **separate panel view** (gear in the header → back to the task list). Highlights:
 
 - **Language** — Follow browser / 中文 / English.
-- **Exact URL dedupe** and **ignore hash** (off = hash is part of the match).
+- **Exact URL dedupe** (full URL: path, query, and hash).
 - **Auto-group by task** after a page reaches `complete`.
 - **Quick search** — optional, off by default.
 - **Gemini Nano (Prompt API)** — status `available` / `downloadable` / `downloading` / `unavailable` / API missing. When downloadable, use **Download / enable Nano** (must be a user gesture; `LanguageModel.create()`).
@@ -131,7 +131,7 @@ There is no first-party cloud account. Full page bodies are not persisted (title
 
 ## Permissions
 
-- `tabs` / `tabGroups` / `scripting` / `storage` / `sessions` / **`sidePanel`**
+- `tabs` / `tabGroups` / `scripting` / `storage` / `sessions` / **`sidePanel`** / `webNavigation`
 - `host_permissions`: `<all_urls>` (compact on-page extract for short summaries)
 - `side_panel.default_path`: `sidepanel/sidepanel.html`
 - `action`: **no** `default_popup`; `setPanelBehavior({ openPanelOnActionClick: true })`
