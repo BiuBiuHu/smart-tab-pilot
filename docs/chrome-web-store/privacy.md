@@ -17,7 +17,7 @@ Smart Tab Pilot is an open-source browser extension (MIT). There is **no first-p
 
 Using Chrome storage APIs only:
 
-- Settings you choose (dedupe, hash matching, auto-group, quick search, window scope, UI language).
+- Settings you choose (dedupe, auto-group, quick search, window scope, UI language).
 - Optional custom model fields: Base URL, API key, model name (`chrome.storage.sync`).
 - Short tab summaries: title, path/slug, 1–2 sentences — **never the full page body**.
 - Navigation-graph priors (URL patterns, not full page text).

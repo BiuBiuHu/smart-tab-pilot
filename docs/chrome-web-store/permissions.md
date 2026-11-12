@@ -29,6 +29,10 @@ Persist user settings (`chrome.storage.sync`: dedupe/hash/auto-group/search/wind
 
 Read Chrome’s recently closed tabs so optional quick search can reopen them. Entries closed by exact-URL dedupe are not added as “recently closed” by this extension.
 
+## `webNavigation`
+
+Read the committed main-frame URL **including the fragment (`#...`)** and hash-only updates. Chrome’s `tabs.Tab.url` often omits the hash, which would make `/page#a` and `/page#b` look identical to exact-URL dedupe. This permission is used only to record the full URL for identity matching; it does not inject into pages or rewrite navigation.
+
 ## `scripting`
 
 Fallback inject when the content script cannot extract a compact text snapshot (CSP / some sandboxed pages). Used only to obtain a short excerpt for naming/judging, never to rewrite the page.

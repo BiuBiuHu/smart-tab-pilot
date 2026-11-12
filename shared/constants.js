@@ -1,7 +1,10 @@
 /** Shared defaults and constants for Smart Tab Pilot. */
 
 export const DEFAULT_SETTINGS = {
-  /** Exact URL match including hash when false (product default). */
+  /**
+   * Unused by exact-dedupe (hash is always part of identity). Kept so old
+   * chrome.storage.sync values still load without schema errors.
+   */
   ignoreHash: false,
   /** Close new tab and activate existing duplicate (all windows). */
   exactDedupeEnabled: true,

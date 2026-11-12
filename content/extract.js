@@ -167,16 +167,20 @@
     return false;
   });
 
-  // Click-source / referrer path for 任务导航图 when openerTabId is missing.
-  try {
-    const referrer = document.referrer || '';
-    if (referrer) {
+  // Full location.href (including hash) for exact-dedupe identity.
+  // Chrome tabs.Tab.url often omits the fragment.
+  const reportLocation = (extra = {}) => {
+    try {
+      const payload = { url: location.href, ...extra };
       chrome.runtime.sendMessage(
-        { type: 'TAB_NAV_HINT', payload: { url: location.href, referrer } },
+        { type: 'TAB_NAV_HINT', payload },
         () => void chrome.runtime.lastError,
       );
+    } catch {
+      /* ignore */
     }
-  } catch {
-    /* ignore */
-  }
+  };
+  reportLocation(document.referrer ? { referrer: document.referrer } : {});
+  window.addEventListener('hashchange', () => reportLocation());
+  window.addEventListener('popstate', () => reportLocation());
 })();

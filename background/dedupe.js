@@ -6,6 +6,7 @@ import { findExactUrlMatch } from '../shared/dedupe-match.js';
 import { getSettings } from '../shared/storage.js';
 import { shouldSkipUrl } from '../shared/url-utils.js';
 import { suppressClosedRecord } from './recent-closed.js';
+import { getLineageMap, hydrateLineage } from './tab-lineage.js';
 
 /** Tabs we just closed (or are closing) as duplicates — avoid re-entry / matching them. */
 const closingTabIds = new Set();
@@ -33,9 +34,17 @@ export async function handleExactDedupe(tabId, url, windowId) {
     return false;
   }
 
+  await hydrateLineage();
+  /** @type {Map<number, string>} */
+  const observedByTabId = new Map();
+  for (const [id, rec] of getLineageMap()) {
+    const observed = rec?.url || rec?.pendingUrl || '';
+    if (observed) observedByTabId.set(id, observed);
+  }
+
   const match = findExactUrlMatch(tabs, tabId, url, {
-    ignoreHash: settings.ignoreHash === true,
     closingTabIds,
+    observedByTabId,
   });
   if (!match || match.id == null) return false;
 

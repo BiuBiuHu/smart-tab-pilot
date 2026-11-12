@@ -4,7 +4,7 @@
  * Survives service-worker restarts via chrome.storage.session.
  */
 import { SESSION_LINEAGE_KEY } from '../shared/constants.js';
-import { isEphemeralNewTabUrl } from '../shared/url-utils.js';
+import { coalesceExactUrl, isEphemeralNewTabUrl } from '../shared/url-utils.js';
 
 /**
  * @typedef {{
@@ -89,8 +89,13 @@ export function rememberTab(tab, opts = {}) {
   if (openerTabId != null && !openerUrl) {
     openerUrl = lineage.get(openerTabId)?.url || '';
   }
-  const url = tab.url || prev?.url || '';
   const pendingUrl = tab.pendingUrl || prev?.pendingUrl || '';
+  const url =
+    coalesceExactUrl(tab.url || '', pendingUrl || prev?.url || '') ||
+    tab.url ||
+    pendingUrl ||
+    prev?.url ||
+    '';
   const dest = (tab.pendingUrl || tab.url || '').trim();
   let birthUrl = prev?.birthUrl || '';
   let openerFromNavigation = prev?.openerFromNavigation === true;
@@ -154,7 +159,7 @@ export function attachLineage(tabs) {
       id: t.id,
       windowId: t.windowId,
       title: t.title,
-      url: t.url || rec?.url || t.pendingUrl || rec?.pendingUrl || '',
+      url: coalesceExactUrl(t.url, rec?.url || t.pendingUrl || rec?.pendingUrl) || t.url || rec?.url || t.pendingUrl || rec?.pendingUrl || '',
       openerTabId: t.openerTabId != null ? t.openerTabId : rec?.openerTabId ?? null,
       createdAt: rec?.createdAt || undefined,
       referrerUrl: rec?.referrerUrl || '',
@@ -186,4 +191,16 @@ export function initTabLineage() {
     // forget is invoked by nav-memory after recording priors
     void tabId;
   });
+
+  const rememberCommittedUrl = (details) => {
+    if (!details || details.frameId !== 0 || details.tabId == null) return;
+    if (!details.url) return;
+    patchLineage(details.tabId, { url: details.url });
+  };
+  try {
+    chrome.webNavigation?.onCommitted?.addListener(rememberCommittedUrl);
+    chrome.webNavigation?.onReferenceFragmentUpdated?.addListener(rememberCommittedUrl);
+  } catch {
+    /* permission may be missing in older unpacked builds */
+  }
 }
