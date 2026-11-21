@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Smart Tab Pilot — 精确去重与任务导航图</title>
+  <meta name="description" content="Chrome MV3 侧边栏扩展：跨窗口精确 URL 去重跳转，再用任务导航图按真实工作归组。设备端 Nano → 自定义 OpenAI 兼容接口 → 启发式。MIT。" />
+  <meta name="theme-color" content="#020807" />
+  <link rel="icon" type="image/png" href="../assets/favicon.png" />
+  <link rel="apple-touch-icon" href="../assets/icon.png" />
+  <link rel="canonical" href="https://biubiuhu.github.io/smart-tab-pilot/zh/" />
+  <link rel="alternate" hreflang="en" href="https://biubiuhu.github.io/smart-tab-pilot/" />
+  <link rel="alternate" hreflang="zh-Hans" href="https://biubiuhu.github.io/smart-tab-pilot/zh/" />
+  <link rel="alternate" hreflang="x-default" href="https://biubiuhu.github.io/smart-tab-pilot/" />
+  <meta property="og:title" content="Smart Tab Pilot — 精确去重与任务导航图" />
+  <meta property="og:description" content="跨窗口精确 URL 去重 + 任务导航图。Chrome 侧边栏。MIT。" />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://biubiuhu.github.io/smart-tab-pilot/zh/" />
+  <meta property="og:image" content="https://biubiuhu.github.io/smart-tab-pilot/assets/hero.png" />
+  <meta property="og:locale" content="zh_CN" />
+  <meta property="og:locale:alternate" content="en_US" />
+  <link rel="stylesheet" href="../site.css" />
+  <script src="../site.js"></script>
+</head>
+<body>
+  <a class="skip" href="#main">跳到正文</a>
+  <div class="wrap">
+    <header>
+      <a class="brand" href="#main">
+        <span class="logo" aria-hidden="true"></span>
+        Smart Tab Pilot
+      </a>
+      <div class="header-end">
+        <nav class="primary" aria-label="主导航">
+          <a href="#promo">介绍</a>
+          <a href="#features">功能</a>
+          <a href="#install">安装</a>
+          <a href="https://chromewebstore.google.com/detail/smart-tab-pilot/acnhnhllaloccmnmdjcgmkmpbkpdegfd" target="_blank" rel="noopener noreferrer">Chrome 网上应用店</a>
+          <a href="https://github.com/BiuBiuHu/smart-tab-pilot" target="_blank" rel="noopener noreferrer">GitHub</a>
+          <a href="privacy.html">隐私政策</a>
+        </nav>
+        <nav class="lang-switch" aria-label="语言">
+          <a href="../" hreflang="en" lang="en" data-set-lang="en">English</a>
+          <span lang="zh-Hans" aria-current="true">中文</span>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="pills" aria-label="状态">
+          <span class="pill">Chrome · Manifest V3</span>
+          <span class="pill">MIT</span>
+          <span class="pill"><strong>Chrome 网上应用店</strong> · 已上架 · v1.5.0</span>
+        </div>
+        <h1 id="hero-title">按任务整理标签，而不是按网站。</h1>
+        <p class="lede">精确 URL 去重（跨窗口跳转），再加上可学习的任务导航图。只用侧边栏。模型顺序：设备端 Nano → 你自己的 OpenAI 兼容接口 → 本地启发式。</p>
+        <div class="cta">
+          <a class="btn btn-primary" href="https://chromewebstore.google.com/detail/smart-tab-pilot/acnhnhllaloccmnmdjcgmkmpbkpdegfd" target="_blank" rel="noopener noreferrer">从 Chrome 网上应用店安装</a>
+          <a class="btn btn-ghost" href="#promo">观看介绍</a>
+          <a class="btn btn-ghost" href="https://github.com/BiuBiuHu/smart-tab-pilot" target="_blank" rel="noopener noreferrer">查看 GitHub 源码</a>
+          <a class="btn btn-ghost" href="#install">加载已解压版本</a>
+        </div>
+        <p class="store-note">已在 Chrome 网上应用店上架（v1.5.0，2026-11-05）。从源码加载已解压扩展仍留给开发者。</p>
+        <figure class="hero-shot" id="promo">
+          <video
+            controls
+            playsinline
+            preload="metadata"
+            poster="../assets/hero.png"
+            width="1920"
+            height="1080"
+            aria-label="Smart Tab Pilot 产品介绍：精确去重与任务导航图"
+          >
+            <source src="../assets/promo.mp4" type="video/mp4" />
+          </video>
+          <figcaption class="hero-caption">
+            约 28 秒产品介绍 — 精确去重、任务导航图、侧边栏。含轻科技背景乐，点击播放（不自动播）。
+          </figcaption>
+        </figure>
+      </section>
+
+      <section id="features" aria-labelledby="features-title">
+        <p class="section-kicker">功能</p>
+        <h2 id="features-title">它能做什么</h2>
+        <p class="section-lede">给使用者看的能力，而不是实现细节。</p>
+        <div class="grid">
+          <article class="card">
+            <h3>精确 URL 去重</h3>
+            <p>任一窗口已有相同 URL 时，跳到已有标签并关掉重复页。默认把 hash 算进匹配；也可在设置里忽略。</p>
+          </article>
+          <article class="card">
+            <h3>任务导航图</h3>
+            <p>规则只出候选（真实来源 / 引用页、项目路径）；模型根据标题 + URL + 短摘要判断是否同一任务。同窗口或开页时间相近不会硬合并。</p>
+          </article>
+          <article class="card">
+            <h3>侧边栏</h3>
+            <p>点击工具栏图标，或按 <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd> / <kbd>⌘</kbd><kbd>⇧</kbd><kbd>K</kbd>。没有工具栏弹窗。</p>
+          </article>
+          <article class="card">
+            <h3>设置单独成页</h3>
+            <p>语言、Nano、自定义模型和开关都在齿轮后面 — 任务列表保持主界面。</p>
+          </article>
+          <article class="card">
+            <h3>窗口范围</h3>
+            <p>全部窗口或仅当前窗口 — 多显示器也是同一套逻辑视图。选择会记住。</p>
+          </article>
+          <article class="card">
+            <h3>拖拽合并与关闭整组</h3>
+            <p>把任务或标签拖到另一组上即可合并，再拆回去，或关掉整个逻辑组。</p>
+          </article>
+          <article class="card">
+            <h3>中文 / English</h3>
+            <p>默认跟随浏览器，也可在设置里锁定中文或 English。</p>
+          </article>
+          <article class="card">
+            <h3>用你的模型，或不用</h3>
+            <p>优先设备端 Gemini Nano。否则用你填写的 OpenAI 兼容 Base URL。再否则走启发式 — 导航图照样工作。不附带厂商后台。</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="models" aria-labelledby="models-title">
+        <p class="section-kicker">模型</p>
+        <h2 id="models-title">Nano → 自定义 → 启发式</h2>
+        <p class="section-lede">命名和混杂簇精炼才走模型；分组主路径仍是导航图。</p>
+        <div class="stack">
+          <div class="card model-row">
+            <span class="step" aria-hidden="true">1</span>
+            <div>
+              <h3>设备端 Gemini Nano</h3>
+              <p>Chrome Prompt API <code>LanguageModel</code>。若模型可下载，到设置里点 <strong>下载 / 启用 Nano</strong>（需要用户手势）。</p>
+            </div>
+          </div>
+          <div class="card model-row">
+            <span class="step" aria-hidden="true">2</span>
+            <div>
+              <h3>你自己的 OpenAI 兼容端点</h3>
+              <p>Base URL、API key 和模型名保存在 <code>chrome.storage.sync</code>。请求只发往<strong>你填写的地址</strong>。</p>
+            </div>
+          </div>
+          <div class="card model-row">
+            <span class="step" aria-hidden="true">3</span>
+            <div>
+              <h3>本地启发式</h3>
+              <p>标题 + 短摘要关键词。页面正文不会离开这台设备。</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="install" aria-labelledby="install-title">
+        <p class="section-kicker">安装</p>
+        <h2 id="install-title">Chrome 网上应用店</h2>
+        <p class="section-lede">能走商店就走商店。加载已解压扩展 / 源码 ZIP 只给开发者，或用不了商店的环境。</p>
+        <div class="stack">
+          <div class="card">
+            <p>公开发布版本 <strong>v1.5.0</strong>（商店更新日期 2026-11-05）。</p>
+            <a class="btn btn-primary" href="https://chromewebstore.google.com/detail/smart-tab-pilot/acnhnhllaloccmnmdjcgmkmpbkpdegfd" target="_blank" rel="noopener noreferrer">从 Chrome 网上应用店安装</a>
+          </div>
+          <div class="card">
+            <h3>加载已解压扩展（开发者）</h3>
+            <p>从包含 <code>manifest.json</code> 的仓库根目录加载已解压的扩展程序。</p>
+            <ol class="install">
+              <li>打开 Chrome → <code>chrome://extensions</code>。</li>
+              <li>打开<strong>开发者模式</strong>。</li>
+              <li>点击<strong>加载已解压的扩展程序</strong>（Load unpacked）。</li>
+              <li>选择<strong>仓库根目录</strong> — 里面有 <code>manifest.json</code> 的那个文件夹（你克隆下来的目录，例如 <code>smart-tab-pilot/</code>）。</li>
+              <li>固定工具栏图标，然后点击它（或 <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd> / <kbd>⌘</kbd><kbd>⇧</kbd><kbd>K</kbd>）。</li>
+            </ol>
+          </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="gallery-title">
+        <p class="section-kicker">产品</p>
+        <h2 id="gallery-title">侧边栏与窗口范围</h2>
+        <p class="section-lede">商店用的是真实产品图，不是模拟界面。</p>
+        <div class="shots">
+          <figure>
+            <img src="../assets/window-scope.png" width="1280" height="800" alt="在全部窗口与仅当前窗口之间切换 — 跨显示器仍是同一套逻辑视图" />
+            <figcaption>全部窗口 / 仅当前窗口 — 跨显示器仍是同一套逻辑视图。</figcaption>
+          </figure>
+          <figure>
+            <img src="../assets/side-panel.png" width="1280" height="800" alt="点击工具栏图标打开 Smart Tab Pilot 侧边栏" />
+            <figcaption>点击工具栏图标即可打开侧边栏。</figcaption>
+          </figure>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <p>Smart Tab Pilot · MIT · v1.5.0 · Chrome Manifest V3</p>
+      <nav aria-label="页脚">
+        <a href="https://chromewebstore.google.com/detail/smart-tab-pilot/acnhnhllaloccmnmdjcgmkmpbkpdegfd" target="_blank" rel="noopener noreferrer">Chrome 网上应用店</a>
+        <a href="https://github.com/BiuBiuHu/smart-tab-pilot" target="_blank" rel="noopener noreferrer">源码</a>
+        <a href="privacy.html">隐私政策</a>
+        <a href="https://github.com/BiuBiuHu/smart-tab-pilot/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">许可证</a>
+      </nav>
+    </footer>
+  </div>
+</body>
+</html>

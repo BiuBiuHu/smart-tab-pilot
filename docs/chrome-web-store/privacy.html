@@ -4,6 +4,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Smart Tab Pilot — Privacy Policy</title>
+  <meta name="description" content="Privacy policy for the Smart Tab Pilot Chrome extension: no first-party cloud account, no analytics, optional calls only to a URL you configure." />
+  <link rel="canonical" href="https://biubiuhu.github.io/smart-tab-pilot/chrome-web-store/privacy.html" />
+  <link rel="alternate" hreflang="en" href="https://biubiuhu.github.io/smart-tab-pilot/chrome-web-store/privacy.html" />
+  <link rel="alternate" hreflang="zh-Hans" href="https://biubiuhu.github.io/smart-tab-pilot/zh/privacy.html" />
+  <link rel="alternate" hreflang="x-default" href="https://biubiuhu.github.io/smart-tab-pilot/chrome-web-store/privacy.html" />
+  <link rel="icon" type="image/png" href="../assets/favicon.png" />
   <style>
     :root {
       color-scheme: light dark;
@@ -35,13 +41,49 @@
     main {
       max-width: 44rem;
       margin: 0 auto;
-      padding: 2.5rem 1.25rem 4rem;
+      padding: 1.5rem 1.25rem 4rem;
+    }
+    .top {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      margin: 0 0 1.75rem;
+    }
+    .top a.home { color: var(--muted); text-decoration: none; font-size: 0.92rem; }
+    .top a.home:hover { color: var(--accent); }
+    .lang-switch {
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 0.12rem;
+    }
+    .lang-switch a,
+    .lang-switch span {
+      display: inline-flex;
+      align-items: center;
+      min-height: 1.7rem;
+      padding: 0.12rem 0.7rem;
+      border-radius: 999px;
+      text-decoration: none;
+      color: var(--muted);
+      font-size: 0.82rem;
+      font-weight: 650;
+    }
+    .lang-switch a:hover { color: var(--text); }
+    .lang-switch [aria-current="true"] {
+      background: var(--accent);
+      color: #04201c;
+    }
+    @media (prefers-color-scheme: light) {
+      .lang-switch [aria-current="true"] { color: #f0fdfa; }
     }
     h1 { font-size: 1.75rem; line-height: 1.25; margin: 0 0 0.5rem; }
     h2 { font-size: 1.15rem; margin: 2rem 0 0.6rem; }
     p, li { color: var(--text); }
-    .meta, .zh { color: var(--muted); font-size: 0.95rem; }
-    .zh { margin: 0 0 1.5rem; }
+    .meta { color: var(--muted); font-size: 0.95rem; }
     a { color: var(--accent); }
     ul { padding-left: 1.2rem; }
     .card {
@@ -51,12 +93,19 @@
       padding: 1rem 1.1rem;
     }
   </style>
+  <script src="../site.js"></script>
 </head>
 <body>
   <main>
+    <div class="top">
+      <a class="home" href="../">Smart Tab Pilot</a>
+      <nav class="lang-switch" aria-label="Language">
+        <span lang="en" aria-current="true">English</span>
+        <a href="../zh/privacy.html" hreflang="zh-Hans" lang="zh-Hans" data-set-lang="zh">中文</a>
+      </nav>
+    </div>
     <h1>Smart Tab Pilot Privacy Policy</h1>
     <p class="meta">Last updated: 2026-11-03 · Chrome Manifest V3 extension</p>
-    <p class="zh">中文摘要：本扩展没有自有云账号或运营后台。默认不上传页面正文。只有你在设置里填写了自定义模型 Base URL 时，才会向<strong>该地址</strong>发送短摘要；作者收不到副本。源码中没有统计或遥测。</p>
 
     <h2>Who we are</h2>
     <p>Smart Tab Pilot is an open-source browser extension (MIT). There is <strong>no first-party cloud account</strong> and <strong>no operator backend</strong> shipped with the extension.</p>

@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Smart Tab Pilot — 隐私政策</title>
+  <meta name="description" content="Smart Tab Pilot Chrome 扩展隐私政策：没有自有云账号，没有统计，只有你配置了自定义地址时才会向该地址发请求。" />
+  <link rel="canonical" href="https://biubiuhu.github.io/smart-tab-pilot/zh/privacy.html" />
+  <link rel="alternate" hreflang="en" href="https://biubiuhu.github.io/smart-tab-pilot/chrome-web-store/privacy.html" />
+  <link rel="alternate" hreflang="zh-Hans" href="https://biubiuhu.github.io/smart-tab-pilot/zh/privacy.html" />
+  <link rel="alternate" hreflang="x-default" href="https://biubiuhu.github.io/smart-tab-pilot/chrome-web-store/privacy.html" />
+  <link rel="icon" type="image/png" href="../assets/favicon.png" />
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #0f172a;
+      --card: #1e293b;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --line: #334155;
+      --accent: #14b8a6;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f8fafc;
+        --card: #ffffff;
+        --text: #0f172a;
+        --muted: #475569;
+        --line: #e2e8f0;
+        --accent: #0f766e;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font: 16px/1.6 system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    main {
+      max-width: 44rem;
+      margin: 0 auto;
+      padding: 1.5rem 1.25rem 4rem;
+    }
+    .top {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      margin: 0 0 1.75rem;
+    }
+    .top a.home { color: var(--muted); text-decoration: none; font-size: 0.92rem; }
+    .top a.home:hover { color: var(--accent); }
+    .lang-switch {
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 0.12rem;
+    }
+    .lang-switch a,
+    .lang-switch span {
+      display: inline-flex;
+      align-items: center;
+      min-height: 1.7rem;
+      padding: 0.12rem 0.7rem;
+      border-radius: 999px;
+      text-decoration: none;
+      color: var(--muted);
+      font-size: 0.82rem;
+      font-weight: 650;
+    }
+    .lang-switch a:hover { color: var(--text); }
+    .lang-switch [aria-current="true"] {
+      background: var(--accent);
+      color: #04201c;
+    }
+    @media (prefers-color-scheme: light) {
+      .lang-switch [aria-current="true"] { color: #f0fdfa; }
+    }
+    h1 { font-size: 1.75rem; line-height: 1.25; margin: 0 0 0.5rem; }
+    h2 { font-size: 1.15rem; margin: 2rem 0 0.6rem; }
+    p, li { color: var(--text); }
+    .meta { color: var(--muted); font-size: 0.95rem; }
+    a { color: var(--accent); }
+    ul { padding-left: 1.2rem; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 1rem 1.1rem;
+    }
+  </style>
+  <script src="../site.js"></script>
+</head>
+<body>
+  <main>
+    <div class="top">
+      <a class="home" href="./">Smart Tab Pilot</a>
+      <nav class="lang-switch" aria-label="语言">
+        <a href="../chrome-web-store/privacy.html" hreflang="en" lang="en" data-set-lang="en">English</a>
+        <span lang="zh-Hans" aria-current="true">中文</span>
+      </nav>
+    </div>
+    <h1>Smart Tab Pilot 隐私政策</h1>
+    <p class="meta">最近更新：2026-11-03 · Chrome Manifest V3 扩展</p>
+
+    <h2>我们是谁</h2>
+    <p>Smart Tab Pilot 是开源浏览器扩展（MIT）。扩展<strong>没有自有云账号</strong>，也<strong>不附带运营后台</strong>。</p>
+
+    <h2>扩展在你设备上存什么</h2>
+    <p>只用 Chrome 存储接口：</p>
+    <ul>
+      <li>你选择的设置（去重、自动归组、快速搜索、窗口范围、界面语言）。</li>
+      <li>可选的自定义模型字段：Base URL、API key、模型名（<code>chrome.storage.sync</code>）。</li>
+      <li>标签短摘要：标题、路径/slug、1–2 句话 — <strong>从不保存整页正文</strong>。</li>
+      <li>导航图先验（URL 模式，不是整页文本）。</li>
+      <li>本次会话的合并/拆分边，以及可选搜索用的最近关闭列表。</li>
+    </ul>
+    <p>卸载扩展会从该配置中删除这些数据（仍受 Chrome 自身存储规则约束）。</p>
+
+    <h2>会从页面读取什么</h2>
+    <p>内容脚本可能从 <code>http(s)</code> 页面读取一份紧凑文本快照，好按<strong>主题</strong>给任务起名，而不是按网站品牌。内存中的摘录有上限，落盘前会再收成短摘要。</p>
+    <p>受限页面（<code>chrome://</code>、<code>chrome-extension://</code>、<code>about:</code> 等）会跳过。</p>
+
+    <h2>网络：什么会离开这台设备</h2>
+    <div class="card">
+      <p><strong>默认 / 未配置自定义模型</strong></p>
+      <ul>
+        <li>若 Chrome Prompt API（<code>LanguageModel</code> / Gemini Nano）可用，短片段会发给<strong>设备端</strong>模型。这条路径不经过开发者运营的服务器。</li>
+        <li>若没有 Nano，你也没配置自定义模型，归组只用本地启发式。<strong>不会上传页面正文。</strong></li>
+      </ul>
+      <p><strong>自定义模型（仅在你配置时）</strong></p>
+      <ul>
+        <li>你可以填写 OpenAI 兼容的 Base URL、API key 和模型名。</li>
+        <li>扩展随后把简短的分类 / 是否同组提示 POST 到<strong>该地址</strong>（通常是 <code>{base}/chat/completions</code>），并带上你的密钥。</li>
+        <li>目的地完全由<strong>你提供</strong>。作者收不到副本。</li>
+        <li>不要指向不信任的主机；把密钥当秘密保管。</li>
+      </ul>
+      <p><strong>不会发送</strong></p>
+      <ul>
+        <li>源码中没有分析统计、广告 ID、崩溃遥测或用量信标。</li>
+        <li>不会自动调用写死的 Smart Tab Pilot 接口。</li>
+      </ul>
+    </div>
+
+    <h2>第三方</h2>
+    <ul>
+      <li>Google Chrome（标签 / 标签组 / 侧边栏 API；可选的设备端 Nano）。</li>
+      <li>仅在你选择时：你填写为 Base URL 的那个地址的运营方。</li>
+    </ul>
+
+    <h2>儿童</h2>
+    <p>本扩展是浏览器标签效率工具。不以儿童为对象，也不会在知情的情况下收集儿童个人信息。</p>
+
+    <h2>变更</h2>
+    <p>若数据处理方式发生变化（例如将来出现自有端点），必须先更新本政策与商店说明，再发布该版本。</p>
+
+    <h2>联系</h2>
+    <p>请到托管本扩展的 <a href="https://github.com/BiuBiuHu/smart-tab-pilot/issues">GitHub 仓库 Issues</a> 反馈。</p>
+  </main>
+</body>
+</html>
