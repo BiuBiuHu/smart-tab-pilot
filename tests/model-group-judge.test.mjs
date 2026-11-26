@@ -13,7 +13,7 @@ import {
   proposeCandidatePairs,
 } from '../shared/model-group-judge.js';
 import { buildTabSummary } from '../shared/tab-summary.js';
-import { buildTaskClusters, recordSessionFeedback } from '../shared/task-graph.js';
+import { buildTaskClusters, collectRuleCandidates, recordSessionFeedback } from '../shared/task-graph.js';
 
 function tab(partial) {
   return {
@@ -280,7 +280,12 @@ function simulateJudge(nodes, modelRaw, buildOpts = {}) {
   const clusters = buildTaskClusters(nodes, buildOpts);
   const summaries = new Map(nodes.map((n) => [n.id, n.summary]));
   const nodesById = new Map(nodes.map((n) => [n.id, n]));
-  const payload = buildJudgePayload(clusters, summaries, nodesById);
+  const payload = buildJudgePayload(
+    clusters,
+    summaries,
+    nodesById,
+    collectRuleCandidates(nodes, buildOpts),
+  );
   const userPrompt = formatJudgeUserPrompt(payload);
   const fullPrompt = `${SAME_GROUP_SYSTEM_PROMPT}\n\n---\n${userPrompt}`;
   const judgment = parseJudgeResponse(modelRaw);
@@ -299,6 +304,8 @@ describe('SAME_GROUP_SYSTEM_PROMPT + screenshot judge simulation', () => {
     assert.match(SAME_GROUP_SYSTEM_PROMPT, /two jobs|keep them separate/i);
     assert.match(SAME_GROUP_SYSTEM_PROMPT, /share a Chrome window|opened around the same time/i);
     assert.match(SAME_GROUP_SYSTEM_PROMPT, /Independently opened/i);
+    assert.match(SAME_GROUP_SYSTEM_PROMPT, /not listed as candidates/i);
+    assert.match(SAME_GROUP_SYSTEM_PROMPT, /never required to merge/i);
   });
 
   it('rules do not hard-merge yuque docs with Bettr consoles (slug is not authority)', () => {
@@ -328,6 +335,8 @@ describe('SAME_GROUP_SYSTEM_PROMPT + screenshot judge simulation', () => {
     assert.match(userPrompt, /nav: openerTab 101/);
     assert.match(userPrompt, /Decide from title \+ full URL \+ intro/);
     assert.match(userPrompt, /Same window or nearby open time is not a merge/);
+    assert.match(userPrompt, /not listed as candidates/i);
+    assert.match(userPrompt, /Missing opener\/referrer is not a reason to split/);
     assert.ok(!userPrompt.includes('BODY'));
     const hinted = proposeCandidatePairs(
       payload.clusters.map((c) => ({ id: c.id, tabIds: c.tabIds, label: c.label })),
@@ -479,9 +488,10 @@ describe('model-first batch judgment — independent vs product tabs', () => {
     ];
 
     const { clusters, payload, next } = simulateJudge(nodes, '{"merges":[[11,12]]}');
-    assert.equal(clusters.length, 5, 'rules must not suck independent tabs into the product task');
+    assert.equal(clusters.length, 4, 'rules must not suck independent tabs into the product task');
     const product = clusters.find((c) => c.tabIds.includes(11));
     assert.ok(product);
+    assert.ok(product.tabIds.includes(12), 'same-product consoles union without waiting for the model');
     assert.equal(product.tabIds.includes(21), false);
     assert.equal(product.tabIds.includes(22), false);
     assert.equal(product.tabIds.includes(23), false);
@@ -506,6 +516,84 @@ describe('model-first batch judgment — independent vs product tabs', () => {
     assert.ok(next.some((c) => c.tabIds.length === 1 && c.tabIds[0] === 21));
     assert.ok(next.some((c) => c.tabIds.length === 1 && c.tabIds[0] === 22));
     assert.ok(next.some((c) => c.tabIds.length === 1 && c.tabIds[0] === 23));
+  });
+
+  it('proposes independently opened same-product clusters as candidates and extraUnions can join rule-split same-class tasks', () => {
+    const product = 'zed';
+    const nodes = [
+      tab({
+        id: 31,
+        windowId: 1,
+        url: `https://github.com/acme/${product}`,
+        title: `acme/${product}: Open source personal agent for local workflows`,
+        semanticLabel: `${product} 仓库`,
+        summary: buildTabSummary({
+          title: `acme/${product}: Open source personal agent for local workflows`,
+          url: `https://github.com/acme/${product}`,
+        }),
+      }),
+      tab({
+        id: 32,
+        windowId: 2,
+        url: `https://${product}.example.dev/`,
+        title: 'Zed - Your personal agent',
+        semanticLabel: `${product} 官网`,
+        summary: buildTabSummary({
+          title: 'Zed - Your personal agent',
+          url: `https://${product}.example.dev/`,
+        }),
+      }),
+    ];
+    const { clusters, payload, next } = simulateJudge(nodes, '{"merges":[[31,32]]}');
+    assert.equal(clusters.length, 1, 'no-model identity already unites repo + site');
+    assert.ok(
+      payload.clusters.flatMap((c) => c.summaries).every((s) => s.title && s.url),
+    );
+    assert.equal(next.length, 1);
+
+    const fakeSplit = [
+      { id: 'task-31', label: '仓库', tabIds: [31] },
+      { id: 'task-32', label: '官网', tabIds: [32] },
+    ];
+    const hinted = proposeCandidatePairs(
+      fakeSplit,
+      new Map(nodes.map((n) => [n.id, n.summary])),
+      new Map(nodes.map((n) => [n.id, n])),
+    );
+    assert.ok(
+      hinted.some((p) => p.a === 'task-31' && p.b === 'task-32'),
+      'model must see the pair even when rules did not slug-match it',
+    );
+
+    const docsAndRuntime = [
+      tab({
+        id: 51,
+        url: 'https://www.marmot-cloud.com/bettr/bettr-promotion/console',
+        title: 'bettr-promotion · Marmot',
+        semanticLabel: 'Bettr Promotion',
+        summary: buildTabSummary({
+          title: 'bettr-promotion · Marmot',
+          url: 'https://www.marmot-cloud.com/bettr/bettr-promotion/console',
+          text: '营销活动控制台。',
+        }),
+      }),
+      tab({
+        id: 52,
+        url: 'https://yuque.antfin.com/ot2rzd/tech/bettr-plan',
+        title: 'BETTR信贷智能增长平台一期技术方案',
+        semanticLabel: '批量发奖demo',
+        summary: buildTabSummary({
+          title: 'BETTR信贷智能增长平台一期技术方案',
+          url: 'https://yuque.antfin.com/ot2rzd/tech/bettr-plan',
+          text: 'Bettr Promotion 一期技术方案与权益、活动、发奖。',
+        }),
+      }),
+    ];
+    const split = simulateJudge(docsAndRuntime, '{"merges":[]}');
+    assert.equal(split.clusters.length, 2);
+    const joined = simulateJudge(docsAndRuntime, '{"merges":[[51,52]]}');
+    assert.equal(joined.next.length, 1);
+    assert.ok(joined.next[0].edges.model >= 1);
   });
 });
 

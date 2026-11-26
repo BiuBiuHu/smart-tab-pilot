@@ -1,7 +1,9 @@
 /**
- * Project affinity FEATURES (candidates only).
- * Slug / path / loopback may propose pairs for the model judge.
- * They are NOT a merge authority — do not union on these keys.
+ * Project affinity FEATURES and obvious same-product identity.
+ * Slug-related / loopback keys may propose pairs for the model judge.
+ * Exact project path (origin + two meaningful segs) and a shared distinctive
+ * product name in title/URL identity positions are conservative unions —
+ * they do not need opener/referrer, and they are not a domain allow/deny list.
  */
 import { isIdLikeSegment } from './url-pattern.js';
 import { shouldSkipUrl } from './url-utils.js';
@@ -227,6 +229,269 @@ export function sharesProjectAffinity(urlA, urlB) {
       if (slugsRelated(s, t)) return true;
     }
   }
+  return false;
+}
+
+/**
+ * @param {string} token
+ * @param {Set<string>} [into]
+ * @returns {boolean}
+ */
+function addIdentityAtom(into, token) {
+  const t = (token || '').toLowerCase();
+  if (!t || t.length < 3) return false;
+  if (HOST_STOP.has(t) || PATH_STOP.has(t) || ENV_SLUG_PARTS.has(t) || GENERIC_PREFIX_SEG.has(t)) {
+    return false;
+  }
+  into.add(t);
+  return true;
+}
+
+/**
+ * Hyphenated product slugs only — never the unhyphenated prefix (`bettr` from
+ * `bettr-promotion`), which is too weak for conservative unions.
+ * @param {string} token
+ * @param {Set<string>} into
+ */
+function addHyphenatedSlugs(token, into) {
+  if (!token || !token.includes('-')) return;
+  for (const slug of slugsFromToken(token)) {
+    if (!slug.includes('-')) continue;
+    addIdentityAtom(into, slug);
+    const canon = canonicalizeSlug(slug);
+    if (canon && canon.includes('-')) addIdentityAtom(into, canon);
+  }
+}
+
+/**
+ * URL identity: subdomain labels + path segments + hyphenated product slugs.
+ * Two-label SLD (`react.dev` → react) is separate — it must not glue every
+ * github.com tab together, but it SHOULD match a repo/path named `react`.
+ * @param {string | undefined} url
+ * @returns {{ strong: Set<string>, sld: Set<string> }}
+ */
+export function urlIdentityParts(url) {
+  const empty = { strong: new Set(), sld: new Set() };
+  if (!url || shouldSkipUrl(url)) return empty;
+  try {
+    const u = new URL(url);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return empty;
+    /** @type {Set<string>} */
+    const strong = new Set();
+    /** @type {Set<string>} */
+    const sld = new Set();
+    const labels = u.hostname.toLowerCase().split('.').filter(Boolean);
+    if (!isLoopbackHost(u.hostname)) {
+      if (labels.length === 2) {
+        addIdentityAtom(sld, labels[0]);
+      } else if (labels.length > 2) {
+        for (const lab of labels.slice(0, -2)) {
+          if (!lab || lab === 'www' || HOST_STOP.has(lab) || /^\d+$/.test(lab)) continue;
+          addIdentityAtom(strong, lab);
+          addHyphenatedSlugs(lab, strong);
+        }
+      }
+    }
+    for (const raw of u.pathname.split('/').filter(Boolean)) {
+      let seg = raw;
+      try {
+        seg = decodeURIComponent(raw);
+      } catch {
+        /* keep */
+      }
+      const lower = seg.toLowerCase();
+      if (!lower || isIdLikeSegment(lower) || isOpaqueSuffix(lower)) continue;
+      if (PATH_STOP.has(lower) || GENERIC_PREFIX_SEG.has(lower)) continue;
+      if (/\.[a-z0-9]{1,5}$/i.test(lower)) continue;
+      addIdentityAtom(strong, lower);
+      addHyphenatedSlugs(lower, strong);
+    }
+    return { strong, sld };
+  } catch {
+    return empty;
+  }
+}
+
+/**
+ * Title identity tokens (whole words / owner-repo / hyphenated product slugs).
+ * @param {string | undefined} title
+ * @returns {Set<string>}
+ */
+export function titleIdentityAtoms(title) {
+  /** @type {Set<string>} */
+  const atoms = new Set();
+  const raw = (title || '').trim();
+  if (!raw) return atoms;
+  const repo = raw.match(/\b[A-Za-z0-9._-]+\/([A-Za-z0-9._-]+)/);
+  if (repo) addIdentityAtom(atoms, repo[1]);
+  const words = raw.toLowerCase().match(/[a-z][a-z0-9-]{2,}|[\u4e00-\u9fff]{2,}/g) || [];
+  for (const w of words) {
+    addIdentityAtom(atoms, w);
+    addHyphenatedSlugs(w, atoms);
+  }
+  return atoms;
+}
+
+/**
+ * Leading product-like name: `Nod - …`, `acme/zed: …`, `bettr-promotion · Marmot`.
+ * @param {string | undefined} title
+ */
+export function leadingTitleAtom(title) {
+  const raw = (title || '').trim();
+  if (!raw) return '';
+  const lead = raw.split(/\s*(?:[:|·—]| - )\s*/)[0] || raw;
+  const repo = lead.match(/^[A-Za-z0-9._-]+\/([A-Za-z0-9._-]+)/);
+  if (repo) {
+    const t = repo[1].toLowerCase();
+    return t.length >= 3 && !PATH_STOP.has(t) && !HOST_STOP.has(t) ? t : '';
+  }
+  const word = lead.toLowerCase().match(/[a-z][a-z0-9-]{2,}|[\u4e00-\u9fff]{2,}/);
+  const t = word ? word[0] : '';
+  if (!t || PATH_STOP.has(t) || HOST_STOP.has(t) || ENV_SLUG_PARTS.has(t)) return '';
+  return t;
+}
+
+/**
+ * Unhyphenated `bettr` is weak on a page that also has `bettr-promotion`.
+ * Hyphenated product slugs stay strong even when a longer env host exists
+ * (`bettr-promotion` vs `bettr-promotion-dev-unio`).
+ * @param {string} token
+ * @param {Set<string>} atoms
+ */
+function isWeakPrefixAtom(token, atoms) {
+  if (!token || token.includes('-')) return false;
+  for (const other of atoms) {
+    if (other !== token && other.startsWith(`${token}-`)) return true;
+  }
+  return false;
+}
+
+/**
+ * Origin + first two path segments, keeping opaque repo names (`k8s-net`).
+ * Distinguishes different products on the same host; not a merge key by itself
+ * when one side has no such path.
+ * @param {string} url
+ */
+function repoStyleKey(url) {
+  try {
+    const u = new URL(url);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return '';
+    const segs = u.pathname
+      .split('/')
+      .filter(Boolean)
+      .map((raw) => {
+        try {
+          return decodeURIComponent(raw).toLowerCase();
+        } catch {
+          return raw.toLowerCase();
+        }
+      })
+      .filter((s) => s && !PATH_STOP.has(s) && !GENERIC_PREFIX_SEG.has(s) && !/^\d+$/.test(s));
+    if (segs.length >= 2) return `${u.origin.toLowerCase()}/${segs[0]}/${segs[1]}`;
+    return '';
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * @param {{ url?: string, title?: string, summary?: { url?: string, title?: string } } | null | undefined} node
+ */
+function nodeUrlTitle(node) {
+  return {
+    url: node?.url || node?.summary?.url || '',
+    title: node?.title || node?.summary?.title || '',
+  };
+}
+
+/**
+ * Obvious same-class / same-product pages. Navigation is irrelevant.
+ * True for GitHub repo + official site sharing a distinctive product name,
+ * or the same origin+two-seg project path. False for license pages, env
+ * consoles, different repos, and docs that only mention a product.
+ * @param {{ url?: string, title?: string, summary?: { url?: string, title?: string } } | null | undefined} nodeA
+ * @param {{ url?: string, title?: string, summary?: { url?: string, title?: string } } | null | undefined} nodeB
+ */
+export function obviousSameProduct(nodeA, nodeB) {
+  const a = nodeUrlTitle(nodeA);
+  const b = nodeUrlTitle(nodeB);
+  if (!a.url || !b.url || a.url === b.url) return false;
+
+  const affA = projectAffinityKeys(a.url);
+  const affB = projectAffinityKeys(b.url);
+  if (affA.prefixKey && affA.prefixKey === affB.prefixKey) return true;
+
+  let originA = '';
+  let originB = '';
+  try {
+    originA = new URL(a.url).origin.toLowerCase();
+  } catch {
+    /* ignore */
+  }
+  try {
+    originB = new URL(b.url).origin.toLowerCase();
+  } catch {
+    /* ignore */
+  }
+  const repoA = repoStyleKey(a.url);
+  const repoB = repoStyleKey(b.url);
+  if (originA && originA === originB && repoA && repoB && repoA !== repoB) {
+    return false;
+  }
+  if (
+    originA &&
+    originA === originB &&
+    affA.prefixKey &&
+    affB.prefixKey &&
+    affA.prefixKey !== affB.prefixKey
+  ) {
+    return false;
+  }
+
+  const idA = urlIdentityParts(a.url);
+  const idB = urlIdentityParts(b.url);
+  const titleA = titleIdentityAtoms(a.title);
+  const titleB = titleIdentityAtoms(b.title);
+
+  for (const t of idA.strong) {
+    if (idB.strong.has(t) && !isWeakPrefixAtom(t, idA.strong) && !isWeakPrefixAtom(t, idB.strong)) {
+      return true;
+    }
+  }
+  for (const t of idA.sld) {
+    if (idB.strong.has(t) && !isWeakPrefixAtom(t, idB.strong)) return true;
+  }
+  for (const t of idB.sld) {
+    if (idA.strong.has(t) && !isWeakPrefixAtom(t, idA.strong)) return true;
+  }
+  if (originA && originA === originB) {
+    for (const t of idA.sld) {
+      if (idB.sld.has(t)) return true;
+    }
+  }
+
+  for (const t of idA.strong) {
+    if (isWeakPrefixAtom(t, idA.strong)) continue;
+    if (titleB.has(t)) return true;
+  }
+  for (const t of idB.strong) {
+    if (isWeakPrefixAtom(t, idB.strong)) continue;
+    if (titleA.has(t)) return true;
+  }
+
+  const leadA = leadingTitleAtom(a.title);
+  const leadB = leadingTitleAtom(b.title);
+  if (leadA && leadA === leadB && leadA.length >= 4) {
+    if (
+      idA.strong.has(leadA) ||
+      idB.strong.has(leadA) ||
+      idA.sld.has(leadA) ||
+      idB.sld.has(leadA)
+    ) {
+      return true;
+    }
+  }
+
   return false;
 }
 

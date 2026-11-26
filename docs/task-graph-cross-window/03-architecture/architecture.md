@@ -105,9 +105,9 @@ tabId → { title, url, pathKey, slugs[], excerpt≤280, extractedAt }
 
 ## 4. 聚类（union-find）
 
-顺序：会话合并 → 真实导航 opener → referrer 命中 → **模型同组**（标题+URL+短摘要；规则只提供 candidate）→ 语义只拆弱混杂簇。
+顺序：会话合并 → 真实导航 opener → referrer 命中 → **明显同一产品/项目路径**（标题/URL 身份，与谁打开无关）→ **模型同组**（标题+URL+短摘要；规则只提供 candidate，模型也可合并未提名的同品类对）→ 语义只拆弱混杂簇。
 
-时间邻接 / 同窗口 / 学习 prior / 产品 slug **禁止** hard-merge。无模型时只保留真实来源/引用（宁可拆开）。
+时间邻接 / 同窗口 / 学习 prior / 松散 slug 相关 **禁止** 单独 hard-merge。无模型时仍合并明显同一产品（共享独特产品名或同一 project path）；不再「没有真实导航就拆开」。
 
 **禁止**：用裸 hostname、regex 产品键、「仅 label 相同」或同窗口/开页时间做并查集 union。`bettr-promotion` 是特征，不是簇 id。同窗**物理组**按规范化标题合一。
 

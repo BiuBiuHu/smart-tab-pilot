@@ -1,9 +1,11 @@
 /**
  * Model-first same-group judgment on short tab summaries.
- * Rules (opener / referrer / time / project / learned) only propose candidates.
- * Regex is never a merge authority. Window / open-time never decide.
+ * Rules (opener / referrer / time / project / learned / product identity)
+ * only propose candidates — the model may also merge pairs that rules did
+ * not pre-propose. Regex is never a merge authority. Window / open-time
+ * never decide. Navigation is a hint, not a requirement.
  */
-import { slugsRelated } from './project-affinity.js';
+import { obviousSameProduct, slugsRelated } from './project-affinity.js';
 import { isReliableOpener } from './task-graph.js';
 
 const HINT_STOP = new Set([
@@ -93,7 +95,11 @@ export function proposeCandidatePairs(clusters, summariesByTab, nodesById, ruleP
         const tb = lexicalHintTokens(clusterHintBlob(list[j], summariesByTab, nodesById));
         hit = tb.find((t) => ta.has(t)) || '';
       }
-      if (hit) add(list[i].id, list[j].id, hit, 'lexical');
+      if (!hit) {
+        const related = clusterPairObviouslyRelated(list[i], list[j], summariesByTab, nodesById);
+        if (related) hit = related;
+      }
+      if (hit) add(list[i].id, list[j].id, hit, hit === 'product' ? 'product' : 'lexical');
     }
   }
 
@@ -110,6 +116,27 @@ export function proposeCandidatePairs(clusters, summariesByTab, nodesById, ruleP
     }
   }
   return pairs;
+}
+
+/**
+ * @param {import('./task-graph.js').TaskCluster} a
+ * @param {import('./task-graph.js').TaskCluster} b
+ * @param {Map<number, import('./tab-summary.js').TabSummary | null | undefined>} summariesByTab
+ * @param {Map<number, import('./task-graph.js').TaskNode>} nodesById
+ */
+function clusterPairObviouslyRelated(a, b, summariesByTab, nodesById) {
+  for (const ida of a?.tabIds || []) {
+    for (const idb of b?.tabIds || []) {
+      const na = nodesById?.get(ida);
+      const nb = nodesById?.get(idb);
+      const sa = summariesByTab?.get(ida);
+      const sb = summariesByTab?.get(idb);
+      const left = { url: sa?.url || na?.url, title: sa?.title || na?.title };
+      const right = { url: sb?.url || nb?.url, title: sb?.title || nb?.title };
+      if (obviousSameProduct(left, right)) return 'product';
+    }
+  }
+  return '';
 }
 
 /**
@@ -210,10 +237,10 @@ export function applyModelJudgment(nodes, clusters, judgment, buildOpts, build) 
 export function formatJudgeUserPrompt(payload) {
   const lines = [];
   lines.push(
-    'Decide from title + full URL + intro. Slugs, opener, referrer, window, and open-time are hints only. Same window or nearby open time is not a merge. Cross-window is not a split reason.',
+    'Decide from title + full URL + intro. Slugs, opener, referrer, window, and open-time are hints only. Same window or nearby open time is not a merge. Cross-window is not a split reason. Missing opener/referrer is not a reason to split. You MAY merge independently opened same-class / same-product tabs even when they are not listed as candidates. Return tab ids (the tab N numbers), not cluster ids.',
   );
   if (payload.candidates?.length) {
-    lines.push('Candidate cluster pairs (not a decision):');
+    lines.push('Candidate cluster pairs (hints only — you may merge other same-class pairs too):');
     for (const p of payload.candidates) {
       const reason = p.reason ? `  reason=${p.reason}` : '';
       lines.push(`  ${p.a} ↔ ${p.b}  hint=${p.productKey}${reason}`);

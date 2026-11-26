@@ -418,41 +418,200 @@ describe('independently opened same-window tabs stay separate', () => {
   });
 });
 
-describe('product-path related tabs can still cluster via the model', () => {
+describe('product-path related tabs cluster by distinctive identity', () => {
   const unio = 'https://bettr-promotion-dev-unio.page.alipay.net/page/home';
   const marmot = 'https://www.marmot-cloud.com/bettr/bettr-promotion/it/console';
   const marketing = 'https://bettr-promotion-marketing-console.example.com/login';
 
-  it('project path is a candidate but not a conservative union', () => {
+  it('shared product identity unions without a model; time is still a candidate', () => {
     const nodes = [
-      tab({ id: 1, windowId: 1, url: unio, semanticLabel: 'Unio', createdAt: 1 }),
-      tab({ id: 2, windowId: 1, url: marmot, semanticLabel: 'Marmot', createdAt: 8_000 }),
-      tab({ id: 3, windowId: 2, url: marketing, semanticLabel: '登录', createdAt: 9_000_000 }),
+      tab({
+        id: 1,
+        windowId: 1,
+        url: unio,
+        title: 'bettr-promotion-dev-unio',
+        semanticLabel: 'Unio',
+        createdAt: 1,
+      }),
+      tab({
+        id: 2,
+        windowId: 1,
+        url: marmot,
+        title: 'bettr-promotion · Marmot',
+        semanticLabel: 'Marmot',
+        createdAt: 8_000,
+      }),
+      tab({
+        id: 3,
+        windowId: 2,
+        url: marketing,
+        title: 'bettr-promotion marketing console',
+        semanticLabel: '登录',
+        createdAt: 9_000_000,
+      }),
     ];
     const first = buildTaskClusters(nodes);
-    assert.equal(first.length, 3);
+    assert.equal(first.length, 1);
+    assert.deepEqual(first[0].tabIds, [1, 2, 3]);
+    assert.ok(first[0].edges.project >= 1);
     const kinds = new Set(collectRuleCandidates(nodes).map((p) => p.kind));
     assert.ok(kinds.has('project'));
     assert.ok(kinds.has('time'), 'nearby same-window product tabs are time candidates');
   });
 
-  it('model extraUnions still join the same product across hosts/windows', () => {
+  it('model extraUnions still join rule-split same-class clusters', () => {
     const nodes = [
-      tab({ id: 1, windowId: 1, url: unio, title: 'Unio', semanticLabel: 'Unio' }),
-      tab({ id: 2, windowId: 3, url: marmot, title: 'Marmot', semanticLabel: 'Marmot' }),
-      tab({ id: 3, windowId: 3, url: marketing, title: 'Marketing', semanticLabel: '登录' }),
+      tab({
+        id: 1,
+        windowId: 1,
+        url: marmot,
+        title: 'bettr-promotion · Marmot',
+        semanticLabel: 'Bettr Promotion',
+      }),
+      tab({
+        id: 2,
+        windowId: 3,
+        url: 'https://yuque.antfin.com/ot2rzd/tech/bettr-plan',
+        title: 'BETTR信贷智能增长平台一期技术方案',
+        semanticLabel: '批量发奖demo',
+      }),
     ];
     const first = buildTaskClusters(nodes);
+    assert.equal(first.length, 2, 'docs vs runtime stay split until the model speaks');
     const merged = applyModelJudgment(
       nodes,
       first,
-      { merges: [[1, 2], [2, 3]] },
+      { merges: [[1, 2]] },
       {},
       buildTaskClusters,
     );
     assert.equal(merged.length, 1);
-    assert.deepEqual(merged[0].tabIds, [1, 2, 3]);
-    assert.equal(merged[0].label, 'Bettr Promotion');
+    assert.deepEqual(merged[0].tabIds, [1, 2]);
     assert.ok(merged[0].edges.model >= 1);
+  });
+});
+
+describe('independently opened same-product tabs cluster without navigation', () => {
+  const t0 = 1_800_000_000_000;
+
+  function repoAndSite(product, { withNav = false } = {}) {
+    return [
+      tab({
+        id: 31,
+        windowId: 1,
+        url: `https://github.com/acme/${product}`,
+        title: `acme/${product}: Open source personal agent for local workflows`,
+        semanticLabel: `${product} 仓库`,
+        createdAt: t0,
+      }),
+      tab({
+        id: 32,
+        windowId: 1,
+        url: `https://${product}.example.dev/`,
+        title: `${product[0].toUpperCase()}${product.slice(1)} - Your personal agent`,
+        semanticLabel: `${product} 官网`,
+        createdAt: t0 + 120_000,
+        openerTabId: withNav ? 31 : null,
+        openerFromNavigation: withNav ? true : undefined,
+      }),
+    ];
+  }
+
+  it('GitHub repo + official site sharing a distinctive name cluster without extraUnions', () => {
+    for (const product of ['zed', 'riverkit']) {
+      const nodes = repoAndSite(product);
+      const clusters = buildTaskClusters(nodes);
+      assert.equal(clusters.length, 1, `${product} should be one task without a model`);
+      assert.deepEqual(clusters[0].tabIds, [31, 32]);
+      assert.equal(clusters[0].edges.opener, 0);
+      assert.equal(clusters[0].edges.referrer, 0);
+      assert.ok(clusters[0].edges.project >= 1);
+      const cands = collectRuleCandidates(nodes);
+      assert.ok(cands.some((p) => p.kind === 'project' && p.a === 31 && p.b === 32));
+    }
+  });
+
+  it('the same pair still clusters when extraUnions repeats the merge', () => {
+    const nodes = repoAndSite('zed');
+    const first = buildTaskClusters(nodes);
+    const merged = applyModelJudgment(
+      nodes,
+      first,
+      { merges: [[31, 32]] },
+      {},
+      buildTaskClusters,
+    );
+    assert.equal(merged.length, 1);
+    assert.deepEqual(merged[0].tabIds, [31, 32]);
+  });
+
+  it('unrelated independently opened tabs stay separate even with nearby createdAt and weak opener', () => {
+    const nodes = [
+      ...repoAndSite('zed'),
+      tab({
+        id: 41,
+        windowId: 1,
+        openerTabId: 31,
+        openerFromNavigation: false,
+        birthUrl: 'chrome://newtab/',
+        url: 'https://licenses.example.org/by/4.0/',
+        title: 'License deed',
+        semanticLabel: '许可协议',
+        createdAt: t0 + 4_000,
+      }),
+      tab({
+        id: 42,
+        windowId: 1,
+        openerTabId: 31,
+        openerFromNavigation: false,
+        url: 'https://ops.corp.example.net/env/5987128',
+        title: 'Env dashboard',
+        semanticLabel: '环境面板',
+        createdAt: t0 + 9_000,
+      }),
+      tab({
+        id: 43,
+        windowId: 1,
+        url: 'https://github.com/acme/other-app',
+        title: 'acme/other-app: A different product',
+        semanticLabel: '另一个产品',
+        createdAt: t0 + 11_000,
+      }),
+    ];
+    const clusters = buildTaskClusters(nodes);
+    const product = clusterOf(clusters, 31);
+    assert.ok(product.tabIds.includes(32));
+    assert.equal(product.tabIds.includes(41), false);
+    assert.equal(product.tabIds.includes(42), false);
+    assert.equal(product.tabIds.includes(43), false);
+    assert.equal(clusterOf(clusters, 41).tabIds.length, 1);
+    assert.equal(clusterOf(clusters, 42).tabIds.length, 1);
+    assert.equal(clusterOf(clusters, 43).tabIds.length, 1);
+  });
+
+  it('true click opener still clusters a real navigation chain', () => {
+    const clusters = buildTaskClusters(repoAndSite('zed', { withNav: true }));
+    assert.equal(clusters.length, 1);
+    assert.ok(clusters[0].edges.opener >= 1);
+  });
+
+  it('true referrer still clusters a click-source chain even without product identity', () => {
+    const clusters = buildTaskClusters([
+      tab({
+        id: 1,
+        url: 'https://news.example.com/story',
+        title: 'A news story',
+        semanticLabel: '新闻',
+      }),
+      tab({
+        id: 2,
+        url: 'https://other.test/detail',
+        title: 'Unrelated detail',
+        referrerUrl: 'https://news.example.com/story',
+        semanticLabel: '百科条目',
+      }),
+    ]);
+    assert.equal(clusters.length, 1);
+    assert.ok(clusters[0].edges.referrer >= 1);
   });
 });

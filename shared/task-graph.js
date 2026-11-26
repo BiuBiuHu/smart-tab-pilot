@@ -1,24 +1,31 @@
 /**
  * 任务导航图 (session/task navigation graph).
  *
- * Rules form CANDIDATES only (opener, referrer, time adjacency, project path,
- * learned priors). Same Chrome window and open-time adjacency never hard-merge.
+ * Grouping criterion is content / class / product. Opener, referrer, window,
+ * and open time are hints only — never a gate, never a hard merge by themselves.
  *
- * Conservative unions (no-model fallback, prefer split over false merge):
+ * Conservative unions (no-model fallback — still merge obvious same-product):
  *   1. User session merge / model extraUnions
  *   2. True navigation opener (tab born with a real destination URL — not Ctrl+T)
  *   3. document.referrer matching another open tab
+ *   4. Obvious same-class / same-product (shared distinctive name in title/URL,
+ *      or same project path identity). Independent opens still merge.
  *
- * Same-task / same-project judgment is model-first on title + URL + summary.
- * Project regex is NOT a union authority. Semantic labels name clusters and
- * only sub-split mixed weak components.
+ * Same-task judgment is model-first on title + URL + summary; the model may
+ * merge pairs rules did not pre-propose. Loose slug-related / time / window /
+ * learned priors stay candidates. Semantic labels name clusters and only
+ * sub-split mixed weak components.
  *
  * Union-find / connected components. Session merge/split overrides are the
  * extension point for user feedback (weights adjusted separately in nav-priors).
  */
 import { LEARNED_UNION_THRESHOLD, TIME_ADJACENCY_MS } from './constants.js';
 import { priorWeight } from './nav-priors.js';
-import { projectDisplayName, sharesProjectAffinity } from './project-affinity.js';
+import {
+  obviousSameProduct,
+  projectDisplayName,
+  sharesProjectAffinity,
+} from './project-affinity.js';
 import { isEphemeralNewTabUrl } from './url-utils.js';
 
 /**
@@ -178,8 +185,19 @@ export function buildTaskClusters(nodes, opts = {}) {
     }
   }
 
-  // Time adjacency, same window, learned priors, and project slug/path are
-  // NEVER union keys. collectRuleCandidates() exposes them as model hints.
+  // 3) Obvious same-product / same-class from title+URL identity.
+  // Independent opens (bookmark, typed URL, no opener) still merge.
+  // Window / open-time / weak tab-strip opener never suffice on their own.
+  for (let i = 0; i < list.length; i++) {
+    for (let j = i + 1; j < list.length; j++) {
+      if (obviousSameProduct(list[i], list[j])) {
+        tryUnion(list[i].id, list[j].id, 'project', true);
+      }
+    }
+  }
+
+  // Time adjacency, same window, learned priors, and loose slug-related
+  // affinity stay candidates. collectRuleCandidates() exposes them as hints.
 
   // Semantic is NOT a union key. Sub-split weak-only components with mixed topics.
   /** @type {Map<number, number[]>} */
@@ -258,7 +276,9 @@ export function collectRuleCandidates(nodes, opts = {}) {
       ) {
         add(a.id, b.id, 'time');
       }
-      if (sharesProjectAffinity(a.url, b.url)) add(a.id, b.id, 'project');
+      if (sharesProjectAffinity(a.url, b.url) || obviousSameProduct(a, b)) {
+        add(a.id, b.id, 'project');
+      }
       if (priorWeight(priors, a.url, b.url) >= learnedThreshold) add(a.id, b.id, 'learned');
     }
   }

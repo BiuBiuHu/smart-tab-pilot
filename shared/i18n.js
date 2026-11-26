@@ -53,11 +53,11 @@ export const MESSAGES = {
     customSaved: '自定义模型已保存。',
     fallbackCustom: '当前将使用自定义模型为任务簇命名（分组本身按任务导航图，非域名）。',
     fallbackHeuristic:
-      '无可用模型时，只保留真实点击来源/引用（宁可拆开也不误并）；同窗口或开页时间相近不会硬合并。主题名用启发式。',
+      '无可用模型时，标题/URL 中明显同一产品或同一项目路径的页面仍会归为一组；同窗口、开页时间或弱 opener 不会硬合并。主题名用启发式。',
 
     togglesTitle: '功能开关',
     toggleDedupe: '精确 URL 去重跳转（含 path / query / hash）',
-    toggleAutoGroup: '自动按任务归组（模型判断是否同一任务；无模型时保守拆开）',
+    toggleAutoGroup: '自动按任务归组（按内容/品类；无模型时仍合并明显同一产品）',
     toggleQuickSearch: '启用快速搜索（P1，默认关闭）',
 
     taskViewTitle: '任务视图',
@@ -182,11 +182,11 @@ export const MESSAGES = {
     fallbackCustom:
       'Task clusters will be named by the custom model (grouping follows the task graph, not domains).',
     fallbackHeuristic:
-      'With no model, only true opener/referrer edges cluster (prefer split over false merges). Same window or nearby open time never hard-merges. Names use heuristics.',
+      'With no model, obviously same-product pages (shared distinctive name in title or URL, or same project path) still cluster. Same window, nearby open time, or a weak opener never hard-merges. Names use heuristics.',
 
     togglesTitle: 'Feature toggles',
     toggleDedupe: 'Exact-URL dedupe jump (path, query, and hash)',
-    toggleAutoGroup: 'Auto-group by task (model judges same-task; conservative split without a model)',
+    toggleAutoGroup: 'Auto-group by task (content/class; obvious same-product still merges without a model)',
     toggleQuickSearch: 'Enable quick search (P1, off by default)',
 
     taskViewTitle: 'Task view',
