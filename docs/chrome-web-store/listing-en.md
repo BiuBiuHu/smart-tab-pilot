@@ -16,7 +16,7 @@ Smart Tab Pilot keeps your Chrome windows tidy without grouping tabs by website.
 If you open a URL that is already open in any window, the existing tab is focused and the duplicate is closed. The full URL must match: path, query string, and hash. Different params or fragments are different pages.
 
 **Task navigation graph**
-Tabs are clustered by content/class/product, then an optional model that reads each tab’s title + URL + short summary. Opener, referrer, same window, or nearby open time are hints only — they never force a merge of different-class pages. Page semantics refine names — they do not glue everything from the same hostname together.
+Tabs are clustered by a fixed priority: your manual merge/split, then a model that reads each tab’s title + URL + short summary (it may merge or split a wrong automatic group), then obvious same-product pages when no model is available. Opener, referrer, same window, or nearby open time are hints only — they never force a merge of different-class pages. Page semantics refine names — they do not glue everything from the same hostname together.
 
 **Side panel**
 Click the toolbar icon (or Ctrl+Shift+K / ⌘⇧K) to open a full side panel: task cards, drag-to-merge, split, close a whole logical group, all-windows vs this-window, and Settings.

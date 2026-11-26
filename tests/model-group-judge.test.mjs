@@ -7,6 +7,7 @@ import { SAME_GROUP_SYSTEM_PROMPT } from '../shared/constants.js';
 import {
   applyModelJudgment,
   buildJudgePayload,
+  clusterLockedByUser,
   formatJudgeUserPrompt,
   lexicalHintTokens,
   parseJudgeResponse,
@@ -34,10 +35,25 @@ describe('parseJudgeResponse', () => {
   it('reads merges and ignores junk', () => {
     const j = parseJudgeResponse('```json\n{"merges":[[2,1],[2,1],[9]]}\n```');
     assert.deepEqual(j.merges, [[1, 2]]);
+    assert.deepEqual(j.splits, []);
+  });
+
+  it('reads splits alongside merges', () => {
+    const j = parseJudgeResponse('{"merges":[[1,2]],"splits":[[3,4],[4,3]]}');
+    assert.deepEqual(j.merges, [[1, 2]]);
+    assert.deepEqual(j.splits, [[3, 4]]);
   });
 
   it('returns empty on malformed text', () => {
-    assert.deepEqual(parseJudgeResponse('not json'), { merges: [] });
+    assert.deepEqual(parseJudgeResponse('not json'), { merges: [], splits: [] });
+  });
+});
+
+describe('clusterLockedByUser', () => {
+  it('is true only when session merges connect every tab', () => {
+    assert.equal(clusterLockedByUser([1, 2, 3], [[1, 2], [2, 3]]), true);
+    assert.equal(clusterLockedByUser([1, 2, 3], [[1, 2]]), false);
+    assert.equal(clusterLockedByUser([1], [[1, 2]]), false);
   });
 });
 
@@ -81,7 +97,7 @@ describe('buildJudgePayload / applyModelJudgment', () => {
     assert.ok(prompt.length < 4000);
   });
 
-  it('applies model merges as a second layer without dropping project rules', () => {
+  it('applies model merges as the automatic layer on top of user/rules fallback', () => {
     const nodes = [
       tab({
         id: 1,
@@ -162,6 +178,43 @@ describe('buildJudgePayload / applyModelJudgment', () => {
       buildTaskClusters,
     );
     assert.equal(next.length, 2);
+  });
+
+  it('model splits can unglue a lower-layer same-product weld; user merge cannot be undone', () => {
+    const product = 'zed';
+    const nodes = [
+      tab({
+        id: 31,
+        url: `https://github.com/acme/${product}`,
+        title: `acme/${product}: Open source personal agent`,
+        semanticLabel: `${product} 仓库`,
+      }),
+      tab({
+        id: 32,
+        url: `https://${product}.example.dev/`,
+        title: 'Zed - Your personal agent',
+        semanticLabel: `${product} 官网`,
+      }),
+    ];
+    const welded = buildTaskClusters(nodes);
+    assert.equal(welded.length, 1, 'no-model fallback still groups obvious same-product');
+    const split = applyModelJudgment(
+      nodes,
+      welded,
+      { merges: [], splits: [[31, 32]] },
+      {},
+      buildTaskClusters,
+    );
+    assert.equal(split.length, 2, 'model split overrides the product fallback');
+
+    const locked = applyModelJudgment(
+      nodes,
+      welded,
+      { merges: [], splits: [[31, 32]] },
+      { sessionMerges: [[31, 32]] },
+      buildTaskClusters,
+    );
+    assert.equal(locked.length, 1, 'user drag-merge survives a model split');
   });
 });
 
@@ -285,6 +338,7 @@ function simulateJudge(nodes, modelRaw, buildOpts = {}) {
     summaries,
     nodesById,
     collectRuleCandidates(nodes, buildOpts),
+    buildOpts.sessionMerges,
   );
   const userPrompt = formatJudgeUserPrompt(payload);
   const fullPrompt = `${SAME_GROUP_SYSTEM_PROMPT}\n\n---\n${userPrompt}`;
@@ -306,6 +360,9 @@ describe('SAME_GROUP_SYSTEM_PROMPT + screenshot judge simulation', () => {
     assert.match(SAME_GROUP_SYSTEM_PROMPT, /Independently opened/i);
     assert.match(SAME_GROUP_SYSTEM_PROMPT, /not listed as candidates/i);
     assert.match(SAME_GROUP_SYSTEM_PROMPT, /never required to merge/i);
+    assert.match(SAME_GROUP_SYSTEM_PROMPT, /userLocked/);
+    assert.match(SAME_GROUP_SYSTEM_PROMPT, /splits/);
+    assert.match(SAME_GROUP_SYSTEM_PROMPT, /MAY split|may split/i);
   });
 
   it('rules do not hard-merge yuque docs with Bettr consoles (slug is not authority)', () => {
@@ -333,10 +390,11 @@ describe('SAME_GROUP_SYSTEM_PROMPT + screenshot judge simulation', () => {
       assert.match(userPrompt, new RegExp(`intro: ${s.intro.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
     }
     assert.match(userPrompt, /nav: openerTab 101/);
-    assert.match(userPrompt, /Decide from title \+ full URL \+ intro/);
+    assert.match(userPrompt, /decide from title \+ full URL \+ intro/i);
     assert.match(userPrompt, /Same window or nearby open time is not a merge/);
     assert.match(userPrompt, /not listed as candidates/i);
     assert.match(userPrompt, /Missing opener\/referrer is not a reason to split/);
+    assert.match(userPrompt, /you MAY split/i);
     assert.ok(!userPrompt.includes('BODY'));
     const hinted = proposeCandidatePairs(
       payload.clusters.map((c) => ({ id: c.id, tabIds: c.tabIds, label: c.label })),
@@ -375,6 +433,17 @@ describe('SAME_GROUP_SYSTEM_PROMPT + screenshot judge simulation', () => {
       (c) => c.tabIds.some((id) => yuqueIds.has(id)) && c.tabIds.some((id) => !yuqueIds.has(id)),
     );
     assert.equal(mixed, false);
+  });
+
+  it('marks user-merged tasks as userLocked so the model must not split them', () => {
+    const nodes = screenshotNodes();
+    const session = screenshotSessionMerges();
+    const { payload, userPrompt } = simulateJudge(nodes, '{"merges":[]}', {
+      sessionMerges: session.merges,
+    });
+    assert.equal(payload.clusters.length, 2);
+    assert.ok(payload.clusters.every((c) => c.userLocked));
+    assert.match(userPrompt, /userLocked/);
   });
 
   it('rich fields distinguish unrelated docs (no BETTR tokens) from Promotion runtime', () => {

@@ -228,6 +228,45 @@ describe('buildTaskClusters — learned priors', () => {
   });
 });
 
+describe('priority stack — user > model split > same-product fallback', () => {
+  const repo = tab({
+    id: 31,
+    url: 'https://github.com/acme/zed',
+    title: 'acme/zed: Open source personal agent for local workflows',
+    semanticLabel: 'zed 仓库',
+  });
+  const site = tab({
+    id: 32,
+    url: 'https://zed.example.dev/',
+    title: 'Zed - Your personal agent',
+    semanticLabel: 'zed 官网',
+  });
+
+  it('no-model fallback still unions obvious same-product', () => {
+    assert.equal(buildTaskClusters([repo, site]).length, 1);
+    assert.equal(buildTaskClusters([repo, site], { productUnions: false }).length, 2);
+  });
+
+  it('model extraSplits unglue a product weld; user merge still wins', () => {
+    const split = buildTaskClusters([repo, site], { extraSplits: [[31, 32]] });
+    assert.equal(split.length, 2);
+    const locked = buildTaskClusters([repo, site], {
+      extraSplits: [[31, 32]],
+      sessionMerges: [[31, 32]],
+    });
+    assert.equal(locked.length, 1);
+    assert.ok(locked[0].edges.feedback >= 1);
+  });
+
+  it('user session split still blocks model extraUnions', () => {
+    const clusters = buildTaskClusters([repo, site], {
+      sessionSplits: [[31, 32]],
+      extraUnions: [[31, 32]],
+    });
+    assert.equal(clusters.length, 2);
+  });
+});
+
 describe('session feedback extension point', () => {
   it('merge forces two unrelated tabs into one task', () => {
     const session = recordSessionFeedback({ merges: [], splits: [] }, 'merge', [1, 2]);
@@ -758,6 +797,38 @@ describe('mixed opener chain across local apps and work docs', () => {
     assert.ok(nod.tabIds.includes(7), 'GitHub repo');
     assert.equal(nod.tabIds.includes(1), false);
     assert.equal(nod.label === '本地应用', false);
+  });
+
+  it('model splits a wrongly joined blob but cannot undo a user drag-merge', () => {
+    const nodes = mixedNodes();
+    const welded = applyModelJudgment(
+      nodes,
+      buildTaskClusters(nodes),
+      { merges: [[1, 2], [2, 5]] },
+      {},
+      buildTaskClusters,
+    );
+    assert.ok(clusterOf(welded, 1).tabIds.includes(5));
+    const split = applyModelJudgment(
+      nodes,
+      welded,
+      { merges: [], splits: [[1, 2], [2, 5]] },
+      {},
+      buildTaskClusters,
+    );
+    assert.equal(clusterOf(split, 1).tabIds.includes(2), false);
+    assert.equal(clusterOf(split, 1).tabIds.includes(5), false);
+
+    const user = recordSessionFeedback({ merges: [], splits: [] }, 'merge', [1, 2, 5]);
+    const locked = applyModelJudgment(
+      nodes,
+      welded,
+      { merges: [], splits: [[1, 2], [2, 5]] },
+      { sessionMerges: user.merges },
+      buildTaskClusters,
+    );
+    assert.ok(clusterOf(locked, 1).tabIds.includes(2));
+    assert.ok(clusterOf(locked, 1).tabIds.includes(5));
   });
 
   it('does not persist model unions as session merges; a later pass can revise', () => {

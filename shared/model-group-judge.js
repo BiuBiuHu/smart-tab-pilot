@@ -1,9 +1,10 @@
 /**
  * Model-first same-group judgment on short tab summaries.
- * Rules (opener / referrer / time / project / learned / product identity)
- * only propose candidates — the model may also merge pairs that rules did
- * not pre-propose. Regex is never a merge authority. Window / open-time
- * never decide. Navigation is a hint, not a requirement.
+ *
+ * Priority: user session > this judge > obvious same-product > opener/referrer
+ * > learned priors > window/time. The model may merge, and may split groups
+ * that lower layers wrongly joined. It must not undo userLocked clusters.
+ * Rules only propose candidates. Window / open-time never decide.
  */
 import { obviousSameProduct, slugsRelated } from './project-affinity.js';
 import { isReliableOpener } from './task-graph.js';
@@ -24,8 +25,57 @@ export function lexicalHintTokens(text) {
 }
 
 /**
- * @typedef {{ merges: [number, number][] }} ModelJudgment
+ * @typedef {{ merges: [number, number][], splits: [number, number][] }} ModelJudgment
  */
+
+/**
+ * Whether every tab in the cluster is connected by user session merges.
+ * @param {number[]} tabIds
+ * @param {[number, number][] | undefined} sessionMerges
+ */
+export function clusterLockedByUser(tabIds, sessionMerges) {
+  const ids = [...new Set((tabIds || []).filter((n) => n != null))];
+  if (ids.length <= 1) return false;
+  /** @type {Map<number, number[]>} */
+  const adj = new Map(ids.map((id) => [id, []]));
+  for (const pair of sessionMerges || []) {
+    const a = pair?.[0];
+    const b = pair?.[1];
+    if (!adj.has(a) || !adj.has(b)) continue;
+    adj.get(a).push(b);
+    adj.get(b).push(a);
+  }
+  const seen = new Set([ids[0]]);
+  const stack = [ids[0]];
+  while (stack.length) {
+    const cur = stack.pop();
+    for (const n of adj.get(cur) || []) {
+      if (seen.has(n)) continue;
+      seen.add(n);
+      stack.push(n);
+    }
+  }
+  return seen.size === ids.length;
+}
+
+/** @param {unknown} rows */
+function parsePairList(rows) {
+  /** @type {[number, number][]} */
+  const out = [];
+  const seen = new Set();
+  if (!Array.isArray(rows)) return out;
+  for (const row of rows) {
+    if (!Array.isArray(row) || row.length < 2) continue;
+    const a = Number(row[0]);
+    const b = Number(row[1]);
+    if (!Number.isFinite(a) || !Number.isFinite(b) || a === b) continue;
+    const key = a < b ? `${a}:${b}` : `${b}:${a}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(a < b ? [a, b] : [b, a]);
+  }
+  return out;
+}
 
 /**
  * Compact payload for Nano / custom — summaries only.
@@ -144,12 +194,14 @@ function clusterPairObviouslyRelated(a, b, summariesByTab, nodesById) {
  * @param {Map<number, import('./tab-summary.js').TabSummary | null | undefined>} summariesByTab
  * @param {Map<number, import('./task-graph.js').TaskNode> | undefined} nodesById
  * @param {{ a: number, b: number, kind: string }[]} [rulePairs]
+ * @param {[number, number][]} [sessionMerges]
  */
-export function buildJudgePayload(clusters, summariesByTab, nodesById, rulePairs) {
+export function buildJudgePayload(clusters, summariesByTab, nodesById, rulePairs, sessionMerges) {
   const items = (clusters || []).map((c) => ({
     id: c.id,
     label: c.label,
     tabIds: c.tabIds.slice(),
+    userLocked: clusterLockedByUser(c.tabIds, sessionMerges),
     productKeys: clusterProductKeys(c, summariesByTab),
     summaries: c.tabIds
       .map((id) => {
@@ -182,42 +234,35 @@ export function buildJudgePayload(clusters, summariesByTab, nodesById, rulePairs
 }
 
 /**
- * Parse model JSON. Extra keys ignored; malformed → empty merges.
+ * Parse model JSON. Extra keys ignored; malformed → empty merges/splits.
  * @param {string | undefined} raw
  * @returns {ModelJudgment}
  */
 export function parseJudgeResponse(raw) {
-  const empty = { merges: /** @type {[number, number][]} */ ([]) };
+  const empty = {
+    merges: /** @type {[number, number][]} */ ([]),
+    splits: /** @type {[number, number][]} */ ([]),
+  };
   if (!raw || typeof raw !== 'string') return empty;
   let text = raw.trim();
   const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
   if (fence) text = fence[1].trim();
   try {
     const data = JSON.parse(text);
-    const rows = Array.isArray(data?.merges) ? data.merges : [];
-    /** @type {[number, number][]} */
-    const merges = [];
-    const seen = new Set();
-    for (const row of rows) {
-      if (!Array.isArray(row) || row.length < 2) continue;
-      const a = Number(row[0]);
-      const b = Number(row[1]);
-      if (!Number.isFinite(a) || !Number.isFinite(b) || a === b) continue;
-      const key = a < b ? `${a}:${b}` : `${b}:${a}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      merges.push(a < b ? [a, b] : [b, a]);
-    }
-    return { merges };
+    return {
+      merges: parsePairList(data?.merges),
+      splits: parsePairList(data?.splits),
+    };
   } catch {
     return empty;
   }
 }
 
 /**
- * Apply extra model merges via the same union-find builder.
- * Session splits still win. Project unions are recomputed. Opener/referrer
- * stay candidates — they are not re-applied as hard unions.
+ * Apply model merges and splits via the same union-find builder.
+ * User session merges still win over model splits. Session splits still win
+ * over model merges. Obvious same-product is recomputed unless extraSplits
+ * unglues a pair. Opener/referrer stay candidates.
  * @param {import('./task-graph.js').TaskNode[]} nodes
  * @param {import('./task-graph.js').TaskCluster[]} clusters
  * @param {ModelJudgment | null | undefined} judgment
@@ -225,10 +270,15 @@ export function parseJudgeResponse(raw) {
  * @param {(nodes: import('./task-graph.js').TaskNode[], opts: object) => import('./task-graph.js').TaskCluster[]} build
  */
 export function applyModelJudgment(nodes, clusters, judgment, buildOpts, build) {
-  const merges = judgment?.merges || [];
-  if (!merges.length || typeof build !== 'function') return clusters;
-  const extraUnions = merges.map(([a, b]) => /** @type {[number, number]} */ ([a, b]));
-  return build(nodes, { ...(buildOpts || {}), extraUnions });
+  if (typeof build !== 'function' || !judgment) return clusters;
+  const extraUnions = (judgment.merges || []).map(
+    ([a, b]) => /** @type {[number, number]} */ ([a, b]),
+  );
+  const extraSplits = (judgment.splits || []).map(
+    ([a, b]) => /** @type {[number, number]} */ ([a, b]),
+  );
+  if (!extraUnions.length && !extraSplits.length) return clusters;
+  return build(nodes, { ...(buildOpts || {}), extraUnions, extraSplits });
 }
 
 /**
@@ -238,7 +288,7 @@ export function applyModelJudgment(nodes, clusters, judgment, buildOpts, build) 
 export function formatJudgeUserPrompt(payload) {
   const lines = [];
   lines.push(
-    'Decide from title + full URL + intro. Slugs, opener, referrer, window, and open-time are hints only. Same window or nearby open time is not a merge. Cross-window is not a split reason. Missing opener/referrer is not a reason to split. You MAY merge independently opened same-class / same-product tabs even when they are not listed as candidates. Return tab ids (the tab N numbers), not cluster ids.',
+    'Priority: userLocked clusters stay together. Then decide from title + full URL + intro. Obvious same-product, slugs, opener, referrer, window, and open-time are hints only — you MAY merge and you MAY split a cluster that mixed different products. Same window or nearby open time is not a merge. Cross-window is not a split reason. Missing opener/referrer is not a reason to split. You MAY merge independently opened same-class / same-product tabs even when they are not listed as candidates. Return tab ids (the tab N numbers), not cluster ids.',
   );
   if (payload.candidates?.length) {
     lines.push('Candidate cluster pairs (hints only — you may merge other same-class pairs too):');
@@ -249,7 +299,8 @@ export function formatJudgeUserPrompt(payload) {
   }
   for (const c of payload.clusters || []) {
     const keys = (c.productKeys || []).join(',') || '-';
-    lines.push(`cluster ${c.id} (${c.label}) productKeys=${keys}:`);
+    const locked = c.userLocked ? ' userLocked' : '';
+    lines.push(`cluster ${c.id} (${c.label})${locked} productKeys=${keys}:`);
     for (const s of c.summaries || []) {
       lines.push(`  tab ${s.tabId}:`);
       if (s.title) lines.push(`    title: ${s.title}`);

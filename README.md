@@ -7,7 +7,7 @@
 
 **Exact URL dedupe with cross-window jump**, plus a **task navigation graph** that groups tabs by content/class/product — not by hostname or who opened whom. The UI lives in Chrome’s **side panel**. Naming and mixed-cluster refinement prefer on-device Gemini Nano, then a custom OpenAI-compatible endpoint, then local heuristics.
 
-中文：跨窗口精确 URL 去重跳转，再用任务导航图按内容/品类归组（规则只出候选，模型根据标题+URL+短摘要判断是否同一任务，也可合并规则未提名的同品类页；无模型时仍合并明显同一产品。同窗口/开页时间/opener 链不会把不同品类硬并）。侧边栏操作；模型顺序为 Nano → 自定义 OpenAI 兼容接口 → 启发式。
+中文：跨窗口精确 URL 去重跳转，再用任务导航图按优先级归组：用户手动合并/拆分 → 模型（可并可拆）→ 无模型时的明显同产品 fallback → opener/referrer 只是提示。同窗口/开页时间/opener 链不会把不同品类硬并。侧边栏操作；模型顺序为 Nano → 自定义 OpenAI 兼容接口 → 启发式。
 
 Available on the [Chrome Web Store](https://chromewebstore.google.com/detail/smart-tab-pilot/acnhnhllaloccmnmdjcgmkmpbkpdegfd) (v1.5.0, listed 2026-11-05). Load unpacked from this repository for development. Privacy policy: [https://biubiuhu.github.io/smart-tab-pilot/chrome-web-store/privacy.html](https://biubiuhu.github.io/smart-tab-pilot/chrome-web-store/privacy.html).
 
@@ -28,7 +28,7 @@ Watch the ~28s product tour on the [GitHub Pages homepage](https://biubiuhu.gith
 ## Features
 
 - **Exact URL dedupe** — If any window already has the **same full URL** (path + query string + hash), Smart Tab Pilot focuses that window, activates the existing tab, and closes the duplicate. Different query params or fragments are different pages. Internal pages (`chrome://`, `chrome-extension://`, `about:`, `edge://`, …) are skipped.
-- **Task navigation graph** — **Content / class / product** is the grouping criterion. Rules (true opener / referrer / time / project path) only propose candidates. **Same-task judgment is model-first** on each tab’s title + URL + short summary and may merge independently opened same-class tabs even when rules did not pre-propose a pair. Same window, nearby open time, or an opener/referrer chain never hard-merges different-class pages. Without a model, obvious same-product pages (shared distinctive name in title or URL, or same project path) still cluster. **Same hostname does not force a merge**. Cross-window work stays one logical task; Chrome `tabGroups` are still written per window.
+- **Task navigation graph** — Priority (high → low): **user manual merge/split** → **model** (title + full URL + short summary; may merge or split a wrong lower-layer group) → **obvious same-product fallback** (no model) → opener/referrer hints → learned priors → window/time. Opener/referrer, same window, or nearby open time never hard-merge different-class pages. **Same hostname does not force a merge**. Cross-window work stays one logical task; Chrome `tabGroups` are still written per window.
 - **Side panel UI** — Click the toolbar icon (or the shortcut) to fill the browser side panel. There is no action popup.
 - **Settings as its own view** — Language, Nano status, custom model fields, and feature toggles live on a separate settings page inside the panel — the task list stays the main surface.
 - **Window scope** — Toggle **All windows** / **Current window only**. The choice is saved.
