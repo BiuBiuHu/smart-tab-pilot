@@ -33,10 +33,9 @@ export const DEFAULT_SETTINGS = {
 
 /**
  * 任务导航图（navigation graph learning）constants.
- * Rules emit candidates (opener / referrer / time / project / learned).
- * Conservative unions: true navigation opener + referrer + user feedback +
- * obvious same-product identity. Window / open-time never hard-merge.
- * Same-task judgment is model-first; the model may merge non-candidate pairs.
+ * Priority (high → low): user session > model (merge and split) > obvious
+ * same-product fallback > opener/referrer hints > learned priors > window/time.
+ * Opener / referrer / window / open-time never hard-merge different-class pages.
  */
 export const TIME_ADJACENCY_MS = 45_000;
 export const LEARNED_UNION_THRESHOLD = 0.35;
@@ -124,19 +123,20 @@ Rules:
  */
 export const SAME_GROUP_SYSTEM_PROMPT = `You judge whether browser tabs belong to the SAME project/task/class.
 Each tab has: page title, full URL, a short intro/summary (1-2 sentences), and optional nav hints (opener/referrer/time/project). Never assume a full page body.
-Slug/product keys, opener, referrer, same-window, open-time adjacency, and "candidate" pairs are HINTS only. Decide from title + URL + intro.
+Priority (high to low): (1) userLocked clusters the user already merged — do not split them; (2) your judgment from title+URL+intro — you MAY merge and you MAY split a cluster that mixed different products; (3) obvious same-product identity is a HINT, never a hard weld of different products; (4) opener/referrer are hints only; (5) learned priors are weak hints; (6) same window / open-time adjacency is never a merge.
 You may merge pairs that are NOT listed as candidates. Navigation is never required to merge and never sufficient to merge.
-Reply with ONLY JSON: {"merges":[[tabId,tabId],...]}  (tab ids, not cluster ids)
+Reply with ONLY JSON: {"merges":[[tabId,tabId],...],"splits":[[tabId,tabId],...]}  (tab ids, not cluster ids)
 Rules:
 - Merge when the fields show one product/project/class even across hosts, windows, or independently opened tabs (e.g. a GitHub repo and that product's official site whose titles/URLs share a distinctive name; Yuque/语雀 BETTR PRD or 技术方案 + Bettr Promotion Marmot/Unio/marketing/alipay pages).
 - Independently opened pages of the same product MUST merge even with no opener/referrer between them.
+- If a cluster mixed different products (local proxy + docs + another local app, or unrelated jobs), split those tab pairs. Do not split userLocked clusters.
 - If the user is clearly doing two jobs (unrelated docs vs an unrelated runtime, or two products), keep them separate.
-- Do not split Unio vs Marketing vs path variants of the same product. Cross-window is not a reason to split.
+- Do not split Unio vs Marketing vs path variants of the same product. Cross-window is not a split reason.
 - Do NOT merge just because hostnames match (two GitHub repos stay split).
 - Do NOT merge just because tabs share a Chrome window or were opened around the same time.
 - Independently opened tools, docs, license pages, calendars, chat apps, or local debug proxies stay separate unless title+URL+intro show the same product/project.
 - Prefer accuracy over recall when intro/title conflict; if still clearly the same BETTR promotion work, merge.
-- If two pages are clearly the same product/class, merge. If they are clearly different products/jobs, keep separate. If truly unsure, return {"merges":[]}.
+- If two pages are clearly the same product/class, merge. If they are clearly different products/jobs, keep separate (use splits if they were already grouped). If truly unsure, return {"merges":[],"splits":[]}.
 - No markdown, no explanation.`;
 
 export const MSG = {

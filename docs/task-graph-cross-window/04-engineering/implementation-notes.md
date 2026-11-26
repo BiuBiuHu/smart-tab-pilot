@@ -28,13 +28,12 @@
 nodes = tabs + lineage + semanticLabel
 UF = {}
 
-union sessionMerges          // 用户反馈
-union extraUnions            // 模型同组（权威判断层，只加并；可并规则未提名的同品类对）
-union reliable opener        // 仅真实导航 opener（tab 出生即带目标 URL，非 Ctrl+T）
-union referrer → 打开中 URL  // document.referrer 命中
-union obvious same-product   // 标题/URL 独特产品名或同一 project path；独立打开也并
-// time / same-window / learned / loose slug-related = CANDIDATES ONLY
-forbid sessionSplits
+union sessionMerges          // 1 用户反馈（拖拽合并/拆分）；模型不得写入、不得撤销
+union extraUnions            // 2 模型同组（当前轮；可并；不持久化为反馈）
+forbid extraSplits           // 2 模型拆开下层误并（不能拆用户合并）
+union obvious same-product   // 3 无模型 fallback；有模型时 extraSplits 可拆
+// 4 opener / referrer, 5 learned, 6 window/time = CANDIDATES ONLY
+forbid sessionSplits         // 1 用户拆分覆盖模型合并与产品 fallback
 
 model judges from title + full URL + short summary (not only rule candidates)
 if 弱簇主题混杂 and 无强边跨主题: split by topic
@@ -43,7 +42,7 @@ persist tabSummary(title, path/slug, 1–2句)  // 永不落盘全文
 physical = coalesce by (windowId, normalize(label)) → 一窗一名一组
 ```
 
-Chrome `tabs.Tab` **没有** `createdAt`。时间邻接只作为模型候选，不再 hard-merge。无模型时仍按标题/URL 合并明显同一产品，不再要求真实导航。
+Chrome `tabs.Tab` **没有** `createdAt`。时间邻接、真实 opener、referrer 只作为模型候选，不再 hard-merge 不同品类。无模型时仍按标题/URL 合并明显同一产品，不再要求真实导航。
 
 ## 3. 学习如何变强
 
@@ -78,7 +77,7 @@ Chrome `tabs.Tab` **没有** `createdAt`。时间邻接只作为模型候选，�
 npm test
 ```
 
-覆盖：真实 opener 混主题仍一团、独立打开的同产品（仓库+官网）无模型也并、同窗独立打开的无关标签不并、时间/学习边只做候选不硬并、反馈 merge/split、跨窗 URL 匹配、浅模式拒绝、Bettr 项目亲和（URL 身份可并、语雀文档不靠 slug 硬并）、短摘要不落盘正文、同窗同名物理组合并、侧栏拖拽任意任务/标签合并（含 HTML5 dataTransfer 仿真与学习 +0.35）、模型同组入参（标题+完整 URL+短摘要+nav，可 extraUnions 合并规则拆开的同品类簇）以及截图场景（Bettr Promotion × 语雀）的脚本化 judge 合并/拆分、关闭本组（跨窗/仅当前窗/已关闭 tab/会话边清理）、设置面板开合与模型字段位置。
+覆盖：优先级栈（用户 > 模型可并可拆 > 同产品 fallback > opener hint）、真实 opener 混品类不硬并、独立打开的同产品（仓库+官网）无模型也并、模型 extraSplits 可拆开产品误焊但拆不了用户合并、同窗独立打开的无关标签不并、时间/学习边只做候选不硬并、反馈 merge/split、跨窗 URL 匹配、浅模式拒绝、Bettr 项目亲和（URL 身份可并、语雀文档不靠 slug 硬并）、本地代理+文档+另一端口 localhost 的 opener 链不并成「本地应用」、短摘要不落盘正文、同窗同名物理组合并、侧栏拖拽任意任务/标签合并（含 HTML5 dataTransfer 仿真与学习 +0.35）、模型同组入参（标题+完整 URL+短摘要+nav，可 extraUnions 合并规则拆开的同品类簇，且不写入用户反馈）以及截图场景（Bettr Promotion × 语雀）的脚本化 judge 合并/拆分、关闭本组（跨窗/仅当前窗/已关闭 tab/会话边清理）、设置面板开合与模型字段位置。
 
 ## 7. 本环境无法远程验证的部分
 

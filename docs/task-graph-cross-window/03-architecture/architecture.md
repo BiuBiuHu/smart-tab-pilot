@@ -93,7 +93,7 @@ tabId → { openerTabId, openerUrl, createdAt, windowId, url, pendingUrl, referr
 ### 3.3 会话反馈（`taskFeedbackEdges`）
 
 `merges: [tabId, tabId][]`、`splits: [tabId, tabId][]`。  
-拆分覆盖 opener（用户明确说「不是同一任务」）；合并强制连边。这是后续加厚在线学习的稳定扩展点：`applyTaskFeedback` / `MSG.TASK_FEEDBACK`。
+只记录**用户**拖拽合并/拆分。拆分覆盖 opener 候选（用户明确说「不是同一任务」）；合并强制连边。模型同组不得写入此结构，否则会把误并固化成「反馈」。这是后续加厚在线学习的稳定扩展点：`applyTaskFeedback` / `MSG.TASK_FEEDBACK`。
 
 ### 3.4 短摘要（`chrome.storage.session` `tabSummaries`）
 
@@ -105,15 +105,22 @@ tabId → { title, url, pathKey, slugs[], excerpt≤280, extractedAt }
 
 ## 4. 聚类（union-find）
 
-顺序：会话合并 → 真实导航 opener → referrer 命中 → **明显同一产品/项目路径**（标题/URL 身份，与谁打开无关）→ **模型同组**（标题+URL+短摘要；规则只提供 candidate，模型也可合并未提名的同品类对）→ 语义只拆弱混杂簇。
+优先级（高 → 低，禁止颠倒）：
 
-时间邻接 / 同窗口 / 学习 prior / 松散 slug 相关 **禁止** 单独 hard-merge。无模型时仍合并明显同一产品（共享独特产品名或同一 project path）；不再「没有真实导航就拆开」。
+1. **用户手动**（拖拽合并 / 拆成独立任务）— 会话覆盖；模型和规则不得在同一会话里悄悄撤销。
+2. **模型判断**（标题 + 完整 URL + 短摘要）— 第一自动层；可并，也可拆开下层误并。当前轮有效，不写入用户反馈。
+3. **明显同一产品/品类**（仓库↔官网、共享产品名、同源项目路径）— 与谁打开无关。无模型时作为 fallback 仍并明显同产品；有模型时只是候选，`extraSplits` 可拆掉误焊。禁止把不同产品焊死。
+4. **导航线索**（真实 opener / `document.referrer`）— 只给模型当 hint，禁止单独 hard-merge。
+5. **学习 prior**（过去的手动重整、稳定导航共现）— 弱 hint。
+6. **同窗口 / 开页时间** — 单独永远不够；最多当候选。
+
+不再「有真实导航就把不同任务焊死」。层 4 曾覆盖层 2/3，把本地代理 + 语雀文档 + 另一端口 localhost 焊成「本地应用」；opener 链不得再这么做。
 
 **禁止**：用裸 hostname、regex 产品键、「仅 label 相同」或同窗口/开页时间做并查集 union。`bettr-promotion` 是特征，不是簇 id。同窗**物理组**按规范化标题合一。
 
 **跨窗口不是拆组原因**：逻辑簇本就可跨窗。Unio / Marketing / Marmot / ac.alipay 应在模型判定后成为同一逻辑任务「Bettr Promotion」。
 
-任务显示名 = canonical 产品名（Bettr Promotion，不含 Unio/Marketing）或多数主题。
+任务显示名 = canonical 产品名（Bettr Promotion，不含 Unio/Marketing）或多数主题。「本地应用」只用于同一端口的纯 loopback 簇；多端口或 loopback+远程必须用内容/任务名。
 
 ## 5. 物理 vs 逻辑
 

@@ -1,8 +1,9 @@
 /**
  * Topic classification: Chrome Prompt API (Gemini Nano) → custom OpenAI-compatible → heuristic.
  * Labels name a task cluster (body/title semantics only) — never domain/hostname aggregation.
- * Clustering lives in the 任务导航图 (content/class; opener/referrer are hints;
- * obvious same-product still merges without a model). This module labels and runs the same-group judge.
+ * Clustering lives in the 任务导航图 (user session > model merge/split >
+ * obvious same-product fallback > opener/referrer hints). This module labels
+ * and runs the same-group judge.
  */
 import {
   CLASSIFY_SYSTEM_PROMPT,

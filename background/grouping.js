@@ -28,7 +28,7 @@ import { listUncachedEligibleTabs } from '../shared/refine-queue.js';
 import { buildTaskClusters, collectRuleCandidates } from '../shared/task-graph.js';
 import { shouldSkipUrl } from '../shared/url-utils.js';
 import { classifyPage, tryModelSameGroupJudge } from './classifier.js';
-import { loadPriors, loadSessionFeedback, recordModelMerges } from './nav-memory.js';
+import { loadPriors, loadSessionFeedback } from './nav-memory.js';
 import { attachLineage, hydrateLineage, patchLineage } from './tab-lineage.js';
 import {
   getTabSummary,
@@ -327,27 +327,37 @@ async function clusterNodes(nodes, opts = {}) {
     sessionMerges: session.merges,
     sessionSplits: session.splits,
   };
-  let clusters = buildTaskClusters(nodes, buildOpts);
+  const clusters = buildTaskClusters(nodes, buildOpts);
   if (opts.useModelJudge) {
-    clusters = await maybeApplyModelJudge(clusters, nodes, buildOpts);
+    return maybeApplyModelJudge(clusters, nodes, buildOpts);
   }
   return clusters;
 }
 
 /**
- * Second layer: model same-group on summaries. Fail-soft; never blocks rules.
+ * First automatic layer: model same-group on summaries. May merge, and may
+ * split groups that opener/product rules wrongly joined. Fail-soft to rules
+ * when no model. Never undoes user session merge/split.
  * @param {import('../shared/task-graph.js').TaskCluster[]} clusters
  * @param {import('../shared/task-graph.js').TaskNode[]} nodes
  * @param {object} buildOpts
  */
 async function maybeApplyModelJudge(clusters, nodes, buildOpts) {
-  if (!clusters || clusters.length < 2) return clusters;
+  if (!clusters?.length) return clusters;
+  const canMerge = clusters.length >= 2;
+  const canSplit = clusters.some((c) => (c.tabIds || []).length > 1);
+  if (!canMerge && !canSplit) return clusters;
   try {
     const summariesByTab = new Map(nodes.map((n) => [n.id, n.summary]));
     const nodesById = new Map(nodes.map((n) => [n.id, n]));
     const rulePairs = collectRuleCandidates(nodes, buildOpts);
-    const payload = buildJudgePayload(clusters, summariesByTab, nodesById, rulePairs);
-    if (payload.clusters.length < 2) return clusters;
+    const payload = buildJudgePayload(
+      clusters,
+      summariesByTab,
+      nodesById,
+      rulePairs,
+      buildOpts.sessionMerges,
+    );
     if (payload.clusters.length > 18) {
       const wanted = new Set(payload.candidates.flatMap((p) => [p.a, p.b]));
       const rest = payload.clusters.filter((c) => !wanted.has(c.id));
@@ -361,8 +371,9 @@ async function maybeApplyModelJudge(clusters, nodes, buildOpts) {
       MODEL_JUDGE_TIMEOUT_MS,
       null,
     );
-    if (!judgment?.merges?.length) return clusters;
-    await recordModelMerges(judgment.merges);
+    if (!judgment) return clusters;
+    // Model unions/splits apply for this pass only. Do not persist them as
+    // session feedback — that override is reserved for explicit user merge/split.
     return applyModelJudgment(nodes, clusters, judgment, buildOpts, buildTaskClusters);
   } catch (err) {
     console.warn('[SmartTabPilot] model same-group judge skipped', err);

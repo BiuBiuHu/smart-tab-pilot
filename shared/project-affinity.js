@@ -498,16 +498,21 @@ export function obviousSameProduct(nodeA, nodeB) {
 /**
  * Human title from the canonical product key only.
  * Never appends Unio / Marketing / env into the cluster name.
+ * 「本地应用」 is only for a homogeneous same-port loopback cluster — a mixed
+ * bag of local ports, or loopback + remote pages, is not a task name.
  * @param {{ url?: string, title?: string }[]} nodes
  */
 export function projectDisplayName(nodes) {
   const list = nodes || [];
   /** @type {Map<string, number>} */
   const scores = new Map();
-  let loopback = '';
+  /** @type {Set<string>} */
+  const loopbackKeys = new Set();
+  let hasNonLoopback = false;
   for (const n of list) {
     const keys = projectAffinityKeys(n.url);
-    if (keys.loopbackKey) loopback = keys.loopbackKey;
+    if (keys.loopbackKey) loopbackKeys.add(keys.loopbackKey);
+    else if (n?.url) hasNonLoopback = true;
     for (const raw of canonicalProductKeys(n.url)) {
       if (raw.startsWith('loopback:')) continue;
       if (!raw.includes('-')) continue;
@@ -524,7 +529,9 @@ export function projectDisplayName(nodes) {
     }
   }
   if (best) return titleCaseSlug(best);
-  if (loopback) return '本地应用';
+  const mixedLoopback = loopbackKeys.size > 1 || (loopbackKeys.size >= 1 && hasNonLoopback);
+  if (mixedLoopback) return '';
+  if (loopbackKeys.size === 1) return '本地应用';
   return '';
 }
 

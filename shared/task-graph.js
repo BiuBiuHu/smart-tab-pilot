@@ -1,23 +1,29 @@
 /**
  * 任务导航图 (session/task navigation graph).
  *
- * Grouping criterion is content / class / product. Opener, referrer, window,
- * and open time are hints only — never a gate, never a hard merge by themselves.
+ * Priority stack (high → low). Do not invert:
+ *   1. User manual actions (drag-merge / 拆成独立任务). Session override.
+ *      Model and rules must not silently undo these in the same session.
+ *   2. Model judgment on title + full URL + short summary. First automatic
+ *      layer: may merge, and may split groups that lower layers wrongly joined.
+ *      Current-pass only — not written as user feedback.
+ *   3. Obvious same-product / same-class (repo vs site, shared product name,
+ *      same-origin project path). Independent of who opened the tab.
+ *      No model → fallback union so obvious same-product still groups.
+ *      Model available → candidate/hint; extraSplits unglue a wrong weld.
+ *      Never a hard weld of different products.
+ *   4. Navigation clues (true opener, document.referrer). Hints only —
+ *      never a standalone hard merge (a click chain across a local proxy,
+ *      work docs, and another local app must not become one cluster).
+ *   5. Learned priors (past manual regroups, stable navigation co-occurrence).
+ *      Weak hints.
+ *   6. Same window and open-time adjacency. Never sufficient; at most candidates.
  *
- * Conservative unions (no-model fallback — still merge obvious same-product):
- *   1. User session merge / model extraUnions
- *   2. True navigation opener (tab born with a real destination URL — not Ctrl+T)
- *   3. document.referrer matching another open tab
- *   4. Obvious same-class / same-product (shared distinctive name in title/URL,
- *      or same project path identity). Independent opens still merge.
+ * Cluster titles follow task content. A mixed cluster (multiple local ports,
+ * or loopback + remote) is not named 「本地应用」.
  *
- * Same-task judgment is model-first on title + URL + summary; the model may
- * merge pairs rules did not pre-propose. Loose slug-related / time / window /
- * learned priors stay candidates. Semantic labels name clusters and only
- * sub-split mixed weak components.
- *
- * Union-find / connected components. Session merge/split overrides are the
- * extension point for user feedback (weights adjusted separately in nav-priors).
+ * Union-find / connected components. Session merge/split is the extension
+ * point for user feedback (weights adjusted separately in nav-priors).
  */
 import { LEARNED_UNION_THRESHOLD, TIME_ADJACENCY_MS } from './constants.js';
 import { priorWeight } from './nav-priors.js';
@@ -128,6 +134,8 @@ function pairKey(a, b) {
  *   sessionMerges?: [number, number][],
  *   sessionSplits?: [number, number][],
  *   extraUnions?: [number, number][],
+ *   extraSplits?: [number, number][],
+ *   productUnions?: boolean,
  * }} [opts]
  * @returns {TaskCluster[]}
  */
@@ -137,61 +145,57 @@ export function buildTaskClusters(nodes, opts = {}) {
   const byId = new Map(list.map((n) => [n.id, n]));
   const sessionMerges = opts.sessionMerges || [];
   const sessionSplits = new Set((opts.sessionSplits || []).map(([a, b]) => pairKey(a, b)));
+  const extraSplitSet = new Set((opts.extraSplits || []).map(([a, b]) => pairKey(a, b)));
+  const sessionMerged = new Set(sessionMerges.map(([a, b]) => pairKey(a, b)));
+  const productUnions = opts.productUnions !== false;
 
-  const blocked = (a, b) => sessionSplits.has(pairKey(a, b));
+  // User splits always block. Model extraSplits block rule/model unions but
+  // must not undo a user merge in the same session.
+  const blocked = (a, b) => {
+    const key = pairKey(a, b);
+    if (sessionSplits.has(key)) return true;
+    if (extraSplitSet.has(key) && !sessionMerged.has(key)) return true;
+    return false;
+  };
 
-  /** @type {Set<string>} pairs that must stay together (opener / feedback merge / referrer) */
+  /** @type {Set<string>} pairs that must stay together (feedback / model / same-product) */
   const strongPairs = new Set();
   /** @type {{ a: number, b: number, kind: string }[]} */
   const usedEdges = [];
 
   const uf = new UnionFind(ids);
 
-  const tryUnion = (a, b, kind, strong) => {
-    if (a === b || !byId.has(a) || !byId.has(b) || blocked(a, b)) return false;
+  const tryUnion = (a, b, kind, strong, ignoreExtraSplits) => {
+    if (a === b || !byId.has(a) || !byId.has(b)) return false;
+    if (sessionSplits.has(pairKey(a, b))) return false;
+    if (!ignoreExtraSplits && blocked(a, b)) return false;
     uf.union(a, b);
     usedEdges.push({ a, b, kind });
     if (strong) strongPairs.add(pairKey(a, b));
     return true;
   };
 
-  // 0) User feedback merge — strongest session override
+  // 1) User feedback merge — highest priority, never undone by model/rules
   for (const [a, b] of sessionMerges) {
-    tryUnion(a, b, 'feedback', true);
+    tryUnion(a, b, 'feedback', true, true);
   }
 
-  // 0b) Optional model same-group merges (second layer; still blocked by sessionSplits)
+  // 2) Model same-group merges (current pass only; blocked by user split / model split)
   for (const [a, b] of opts.extraUnions || []) {
     tryUnion(a, b, 'model', true);
   }
 
-  // 1) True navigation opener only. Chrome tab-strip opener (Ctrl+T / New Tab)
-  // is a candidate for the model, never a conservative hard-merge.
-  for (const n of list) {
-    if (isReliableOpener(n)) {
-      tryUnion(n.id, n.openerTabId, 'opener', true);
-    }
-  }
-
-  // 2) True referrer / click-source → another open tab (document.referrer).
-  for (const n of list) {
-    const ref = (n.referrerUrl || '').trim();
-    if (!ref) continue;
-    for (const other of list) {
-      if (other.id === n.id) continue;
-      if ((other.url || '') === ref) {
-        tryUnion(n.id, other.id, 'referrer', true);
-      }
-    }
-  }
+  // 4) True navigation opener / referrer: candidates only (collectRuleCandidates).
 
   // 3) Obvious same-product / same-class from title+URL identity.
-  // Independent opens (bookmark, typed URL, no opener) still merge.
-  // Window / open-time / weak tab-strip opener never suffice on their own.
-  for (let i = 0; i < list.length; i++) {
-    for (let j = i + 1; j < list.length; j++) {
-      if (obviousSameProduct(list[i], list[j])) {
-        tryUnion(list[i].id, list[j].id, 'project', true);
+  // No-model fallback. When the model spoke, extraSplits can unglue a pair.
+  // Window / open-time / opener / referrer never suffice on their own.
+  if (productUnions) {
+    for (let i = 0; i < list.length; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        if (obviousSameProduct(list[i], list[j])) {
+          tryUnion(list[i].id, list[j].id, 'project', true);
+        }
       }
     }
   }
@@ -288,7 +292,8 @@ export function collectRuleCandidates(nodes, opts = {}) {
 
 /**
  * If a component has mixed real topics AND no strong pair bridges those topic
- * groups, split by topic. Opener-connected mixed topics stay together.
+ * groups, split by topic. User-feedback / model / same-product pairs stay
+ * together; opener/referrer chains do not.
  * @param {number[]} memberIds
  * @param {Map<number, TaskNode>} byId
  * @param {Set<string>} strongPairs
@@ -311,8 +316,9 @@ export function subSplitIfWeakMixed(memberIds, byId, strongPairs) {
     return [memberIds];
   }
 
-  // Strong subgraph is transitive: opener / referrer / project / feedback.
-  // Semantic labels name the cluster — they must not split a strong component.
+  // Strong subgraph is transitive: user feedback / model extraUnions / remaining
+  // project pairs. extraSplits remove a pair from this graph so mixed topics
+  // can separate. Semantic labels must not split a still-strong component.
   const strongUf = new UnionFind(memberIds);
   for (let i = 0; i < memberIds.length; i++) {
     for (let j = i + 1; j < memberIds.length; j++) {
