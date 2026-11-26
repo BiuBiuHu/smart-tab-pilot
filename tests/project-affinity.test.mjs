@@ -5,11 +5,14 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   canonicalProductKeys,
+  leadingTitleAtom,
+  obviousSameProduct,
   projectAffinityKeys,
   projectDisplayName,
   sharesProjectAffinity,
   slugsRelated,
   titleCaseSlug,
+  urlIdentityParts,
 } from '../shared/project-affinity.js';
 import { applyModelJudgment, proposeCandidatePairs } from '../shared/model-group-judge.js';
 import { buildTabSummary } from '../shared/tab-summary.js';
@@ -126,7 +129,7 @@ describe('canonical product key — four screenshot URL shapes', () => {
     }
   });
 
-  it('does not regex-union the four shapes (slug is not authority)', () => {
+  it('unions the four shapes via distinctive URL identity, not a regex cluster id', () => {
     const nodes = [
       tab({
         id: 1,
@@ -162,26 +165,53 @@ describe('canonical product key — four screenshot URL shapes', () => {
       }),
     ];
     const first = buildTaskClusters(nodes);
-    assert.equal(first.length, 4, 'regex must not hard-merge');
-    assert.ok(first.every((c) => !/unio|marketing/i.test(c.label)));
+    assert.equal(first.length, 1, 'shared bettr-promotion identity should union without a model');
+    assert.equal(first[0].label, 'Bettr Promotion');
+    assert.deepEqual(first[0].tabIds, [1, 2, 3, 4]);
+    assert.ok(first[0].windowIds.includes(3));
+    assert.ok(first[0].windowIds.includes(5));
+    assert.ok(first[0].edges.project >= 1);
+    assert.ok(!/unio|marketing/i.test(first[0].label));
 
     const summaries = new Map(nodes.map((n) => [n.id, n.summary]));
-    const candidates = proposeCandidatePairs(first, summaries);
+    const splitLike = nodes.map((n) => ({
+      id: `task-${n.id}`,
+      label: n.semanticLabel,
+      tabIds: [n.id],
+    }));
+    const candidates = proposeCandidatePairs(splitLike, summaries);
     assert.ok(candidates.length >= 3);
-    assert.ok(candidates.every((p) => p.productKey === 'bettr-promotion' || p.productKey === 'bettr'));
+    assert.ok(
+      candidates.every((p) => p.productKey === 'bettr-promotion' || p.productKey === 'bettr' || p.productKey === 'product'),
+    );
+
+    const docs = tab({
+      id: 9,
+      windowId: 1,
+      url: 'https://yuque.antfin.com/ot2rzd/tech/bettr-plan',
+      title: 'BETTR信贷智能增长平台一期技术方案',
+      semanticLabel: '批量发奖demo',
+      summary: buildTabSummary({
+        title: 'BETTR信贷智能增长平台一期技术方案',
+        url: 'https://yuque.antfin.com/ot2rzd/tech/bettr-plan',
+        text: 'Bettr Promotion 一期技术方案与权益、活动、发奖。',
+      }),
+    });
+    const withDocs = buildTaskClusters([...nodes, docs]);
+    const product = withDocs.find((c) => c.tabIds.includes(1));
+    const yuque = withDocs.find((c) => c.tabIds.includes(9));
+    assert.ok(product && yuque);
+    assert.notEqual(product.id, yuque.id, 'docs that only mention a product must not hard-merge');
 
     const merged = applyModelJudgment(
-      nodes,
-      first,
-      { merges: [[1, 2], [2, 3], [3, 4]] },
+      [...nodes, docs],
+      withDocs,
+      { merges: [[1, 9]] },
       {},
       buildTaskClusters,
     );
     assert.equal(merged.length, 1);
-    assert.equal(merged[0].label, 'Bettr Promotion');
-    assert.deepEqual(merged[0].tabIds, [1, 2, 3, 4]);
-    assert.ok(merged[0].windowIds.includes(3));
-    assert.ok(merged[0].windowIds.includes(5));
+    assert.ok(merged[0].tabIds.includes(9));
     assert.ok(merged[0].edges.model >= 1);
   });
 
@@ -232,6 +262,94 @@ describe('buildTaskClusters — no regex product authority', () => {
       { sessionSplits: [[1, 2]], extraUnions: [[1, 2]] },
     );
     assert.equal(clusters.length, 2);
+  });
+});
+
+describe('obviousSameProduct — content/class identity, not navigation', () => {
+  const repo = (name, extra = {}) => ({
+    url: `https://github.com/acme/${name}`,
+    title: extra.title || `acme/${name}: Open source personal agent for teams`,
+  });
+  const site = (host, extra = {}) => ({
+    url: `https://${host}/`,
+    title: extra.title || `${host.split('.')[0]} - Your personal agent`,
+  });
+
+  it('merges independently opened GitHub repo + official site sharing a distinctive name', () => {
+    assert.equal(obviousSameProduct(repo('zed'), site('zed.example.dev')), true);
+    assert.equal(obviousSameProduct(repo('riverkit'), site('riverkit.example.io')), true);
+    assert.equal(
+      sharesProjectAffinity(repo('zed').url, site('zed.example.dev').url),
+      false,
+      'must not depend on slug-related project affinity for short names',
+    );
+    assert.ok(urlIdentityParts(repo('zed').url).strong.has('zed'));
+    assert.ok(urlIdentityParts(site('zed.example.dev').url).strong.has('zed'));
+    assert.equal(leadingTitleAtom('acme/zed: Open source personal agent'), 'zed');
+    assert.equal(leadingTitleAtom('Zed - Your personal agent'), 'zed');
+  });
+
+  it('merges official 2-label product site with the GitHub repo of that product', () => {
+    assert.equal(
+      obviousSameProduct(
+        { url: 'https://github.com/facebook/react', title: 'facebook/react: The library' },
+        { url: 'https://react.dev/', title: 'React' },
+      ),
+      true,
+    );
+  });
+
+  it('merges same project path identity (one repo, issues vs pull)', () => {
+    assert.equal(
+      obviousSameProduct(
+        { url: 'https://github.com/acme/app/issues/1', title: 'Bug' },
+        { url: 'https://github.com/acme/app/pull/2', title: 'Fix' },
+      ),
+      true,
+    );
+  });
+
+  it('does not merge different products, license pages, or env consoles', () => {
+    const product = {
+      url: 'https://www.marmot-cloud.com/bettr/bettr-promotion/it/console',
+      title: 'bettr-promotion · Marmot',
+    };
+    assert.equal(
+      obviousSameProduct(repo('react-hooks-guide'), repo('k8s-net')),
+      false,
+    );
+    assert.equal(
+      obviousSameProduct(product, {
+        url: 'https://licenses.example.org/by/4.0/',
+        title: 'License deed',
+      }),
+      false,
+    );
+    assert.equal(
+      obviousSameProduct(product, {
+        url: 'https://ops.corp.example.net/env/5987128',
+        title: 'Env dashboard',
+      }),
+      false,
+    );
+    assert.equal(
+      obviousSameProduct(
+        { url: 'https://react.dev/reference/useeffect', title: 'useEffect' },
+        { url: 'https://github.com/foo/react-hooks-guide', title: 'React hooks guide' },
+      ),
+      false,
+    );
+    assert.equal(
+      obviousSameProduct(
+        {
+          url: 'https://yuque.antfin.com/ot2rzd/tech/bettr-plan',
+          title: 'BETTR信贷智能增长平台一期技术方案',
+        },
+        product,
+      ),
+      false,
+      'a doc that mentions a product is not the same as URL identity of that product',
+    );
   });
 });
 

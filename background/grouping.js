@@ -1,5 +1,5 @@
 /**
- * Task-aware grouping: conservative 任务导航图 + model same-task judge
+ * Task-aware grouping: content/class 任务导航图 + model same-task judge
  * → per-window chrome.tabGroups. Cross-window clusters are logical only;
  * physical groups stay in one windowId.
  */
