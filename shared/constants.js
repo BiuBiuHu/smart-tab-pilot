@@ -34,9 +34,10 @@ export const DEFAULT_SETTINGS = {
 /**
  * 任务导航图（navigation graph learning）constants.
  * Rules emit candidates (opener / referrer / time / project / learned).
- * Conservative unions: true navigation opener + referrer + user feedback +
- * obvious same-product identity. Window / open-time never hard-merge.
- * Same-task judgment is model-first; the model may merge non-candidate pairs.
+ * Conservative unions: user session feedback + current-pass model extraUnions +
+ * obvious same-product identity. Opener / referrer / window / open-time never
+ * hard-merge different-class pages. Same-task judgment is model-first; the
+ * model may merge non-candidate pairs and later passes may revise them.
  */
 export const TIME_ADJACENCY_MS = 45_000;
 export const LEARNED_UNION_THRESHOLD = 0.35;

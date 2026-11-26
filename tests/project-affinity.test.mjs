@@ -367,4 +367,37 @@ describe('projectDisplayName', () => {
     assert.equal(projectDisplayName([{ url: BETTR_FIXTURES.unio }]), 'Bettr Promotion');
     assert.equal(projectDisplayName([{ url: BETTR_FIXTURES.marketing }]), 'Bettr Promotion');
   });
+
+  it('uses 本地应用 only for a homogeneous same-port loopback cluster', () => {
+    assert.equal(
+      projectDisplayName([{ url: 'http://127.0.0.1:8787/' }]),
+      '本地应用',
+    );
+    assert.equal(
+      projectDisplayName([
+        { url: 'http://127.0.0.1:8787/' },
+        { url: 'http://127.0.0.1:8787/health' },
+      ]),
+      '本地应用',
+    );
+  });
+
+  it('does not name mixed loopback clusters 本地应用', () => {
+    assert.equal(
+      projectDisplayName([
+        { url: 'http://127.0.0.1:8787/' },
+        { url: 'http://localhost:4310/' },
+      ]),
+      '',
+      'multiple local ports are not one task named 本地应用',
+    );
+    assert.equal(
+      projectDisplayName([
+        { url: 'http://localhost:4310/' },
+        { url: 'https://nod.example.dev/' },
+      ]),
+      '',
+      'loopback + remote is not a generic localhost bucket',
+    );
+  });
 });

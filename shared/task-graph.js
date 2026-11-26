@@ -2,19 +2,22 @@
  * 任务导航图 (session/task navigation graph).
  *
  * Grouping criterion is content / class / product. Opener, referrer, window,
- * and open time are hints only — never a gate, never a hard merge by themselves.
+ * and open time are hints only — never a gate, never a hard merge of
+ * different-class pages (a click chain across a local proxy, docs, and another
+ * local app must not become one cluster).
  *
  * Conservative unions (no-model fallback — still merge obvious same-product):
- *   1. User session merge / model extraUnions
- *   2. True navigation opener (tab born with a real destination URL — not Ctrl+T)
- *   3. document.referrer matching another open tab
- *   4. Obvious same-class / same-product (shared distinctive name in title/URL,
+ *   1. User session merge (manual drag-merge / split — the only persisted override)
+ *   2. Model extraUnions for the current pass only (not written as user feedback)
+ *   3. Obvious same-class / same-product (shared distinctive name in title/URL,
  *      or same project path identity). Independent opens still merge.
  *
- * Same-task judgment is model-first on title + URL + summary; the model may
- * merge pairs rules did not pre-propose. Loose slug-related / time / window /
- * learned priors stay candidates. Semantic labels name clusters and only
- * sub-split mixed weak components.
+ * True navigation opener and document.referrer are candidates for the model,
+ * never conservative unions. Same-task judgment is model-first on title + URL +
+ * summary; the model may merge pairs rules did not pre-propose, and a later
+ * pass may revise those unions. Loose slug-related / time / window / learned
+ * priors stay candidates. Semantic labels name clusters and only sub-split
+ * mixed weak components.
  *
  * Union-find / connected components. Session merge/split overrides are the
  * extension point for user feedback (weights adjusted separately in nav-priors).
@@ -140,7 +143,7 @@ export function buildTaskClusters(nodes, opts = {}) {
 
   const blocked = (a, b) => sessionSplits.has(pairKey(a, b));
 
-  /** @type {Set<string>} pairs that must stay together (opener / feedback merge / referrer) */
+  /** @type {Set<string>} pairs that must stay together (feedback / model / same-product) */
   const strongPairs = new Set();
   /** @type {{ a: number, b: number, kind: string }[]} */
   const usedEdges = [];
@@ -160,34 +163,18 @@ export function buildTaskClusters(nodes, opts = {}) {
     tryUnion(a, b, 'feedback', true);
   }
 
-  // 0b) Optional model same-group merges (second layer; still blocked by sessionSplits)
+  // 0b) Optional model same-group merges (current pass only; still blocked by sessionSplits)
   for (const [a, b] of opts.extraUnions || []) {
     tryUnion(a, b, 'model', true);
   }
 
-  // 1) True navigation opener only. Chrome tab-strip opener (Ctrl+T / New Tab)
-  // is a candidate for the model, never a conservative hard-merge.
-  for (const n of list) {
-    if (isReliableOpener(n)) {
-      tryUnion(n.id, n.openerTabId, 'opener', true);
-    }
-  }
+  // True navigation opener and document.referrer are candidates only
+  // (collectRuleCandidates). They must not hard-merge different-class pages.
+  // Chrome tab-strip opener (Ctrl+T / New Tab) was already never a union.
 
-  // 2) True referrer / click-source → another open tab (document.referrer).
-  for (const n of list) {
-    const ref = (n.referrerUrl || '').trim();
-    if (!ref) continue;
-    for (const other of list) {
-      if (other.id === n.id) continue;
-      if ((other.url || '') === ref) {
-        tryUnion(n.id, other.id, 'referrer', true);
-      }
-    }
-  }
-
-  // 3) Obvious same-product / same-class from title+URL identity.
+  // 1) Obvious same-product / same-class from title+URL identity.
   // Independent opens (bookmark, typed URL, no opener) still merge.
-  // Window / open-time / weak tab-strip opener never suffice on their own.
+  // Window / open-time / opener / referrer never suffice on their own.
   for (let i = 0; i < list.length; i++) {
     for (let j = i + 1; j < list.length; j++) {
       if (obviousSameProduct(list[i], list[j])) {
@@ -288,7 +275,8 @@ export function collectRuleCandidates(nodes, opts = {}) {
 
 /**
  * If a component has mixed real topics AND no strong pair bridges those topic
- * groups, split by topic. Opener-connected mixed topics stay together.
+ * groups, split by topic. User-feedback / model / same-product pairs stay
+ * together; opener/referrer chains do not.
  * @param {number[]} memberIds
  * @param {Map<number, TaskNode>} byId
  * @param {Set<string>} strongPairs
@@ -311,7 +299,7 @@ export function subSplitIfWeakMixed(memberIds, byId, strongPairs) {
     return [memberIds];
   }
 
-  // Strong subgraph is transitive: opener / referrer / project / feedback.
+  // Strong subgraph is transitive: project / feedback / model extraUnions.
   // Semantic labels name the cluster — they must not split a strong component.
   const strongUf = new UnionFind(memberIds);
   for (let i = 0; i < memberIds.length; i++) {

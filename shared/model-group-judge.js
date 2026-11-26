@@ -216,7 +216,8 @@ export function parseJudgeResponse(raw) {
 
 /**
  * Apply extra model merges via the same union-find builder.
- * Session splits still win. Project / opener unions are recomputed (not undone).
+ * Session splits still win. Project unions are recomputed. Opener/referrer
+ * stay candidates — they are not re-applied as hard unions.
  * @param {import('./task-graph.js').TaskNode[]} nodes
  * @param {import('./task-graph.js').TaskCluster[]} clusters
  * @param {ModelJudgment | null | undefined} judgment

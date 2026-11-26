@@ -123,6 +123,8 @@ export async function pruneSessionFeedbackForTabs(tabIds) {
 /**
  * Manual merge/split: adjust durable weights + session overrides.
  * `clusterUrls` is two groups (merge A↔B) or one group (split all pairs).
+ * Model-decided merges must NOT go through this path — they are current-pass
+ * extraUnions only, so a later judge can revise them.
  * @param {{
  *   action: 'merge'|'split',
  *   tabIds?: number[],
@@ -151,20 +153,6 @@ export async function applyTaskFeedback(payload) {
   }
 
   return { ok: true, action, session: nextSession };
-}
-
-/**
- * Persist model-decided tab pairs as session merges (not regex).
- * @param {[number, number][]} pairs
- */
-export async function recordModelMerges(pairs) {
-  if (!pairs?.length) return;
-  let session = await loadSessionFeedback();
-  for (const [a, b] of pairs) {
-    if (a == null || b == null || a === b) continue;
-    session = recordSessionFeedback(session, 'merge', [a, b]);
-  }
-  await saveSessionFeedback(session);
 }
 
 export function initNavMemory() {

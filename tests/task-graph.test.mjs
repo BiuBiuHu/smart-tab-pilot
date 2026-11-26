@@ -45,9 +45,9 @@ describe('labelsCompatible', () => {
   });
 });
 
-describe('buildTaskClusters — opener is strongest', () => {
-  it('keeps an opener chain together even when topics differ', () => {
-    const clusters = buildTaskClusters([
+describe('buildTaskClusters — opener/referrer are hints, not hard merges', () => {
+  it('does not hard-merge an opener chain of different-class pages', () => {
+    const nodes = [
       tab({
         id: 1,
         url: 'https://github.com/acme/app/pull/11',
@@ -70,10 +70,15 @@ describe('buildTaskClusters — opener is strongest', () => {
         semanticLabel: 'API 文档',
         createdAt: 2000,
       }),
-    ]);
-    assert.equal(clusters.length, 1);
-    assert.deepEqual(clusters[0].tabIds, [1, 2, 3]);
-    assert.ok(clusters[0].edges.opener >= 2);
+    ];
+    const clusters = buildTaskClusters(nodes);
+    assert.equal(clusters.length, 3);
+    assert.equal(clusterOf(clusters, 1).tabIds.length, 1);
+    assert.equal(clusterOf(clusters, 2).tabIds.length, 1);
+    assert.equal(clusterOf(clusters, 3).tabIds.length, 1);
+    const cands = collectRuleCandidates(nodes);
+    assert.ok(cands.some((p) => p.kind === 'opener' && p.a === 1 && p.b === 2));
+    assert.ok(cands.some((p) => p.kind === 'opener' && p.a === 2 && p.b === 3));
   });
 });
 
@@ -138,8 +143,8 @@ describe('buildTaskClusters — same domain must split by topic when tasks diffe
 });
 
 describe('buildTaskClusters — referrer click-source', () => {
-  it('unions a tab whose referrer matches another open URL', () => {
-    const clusters = buildTaskClusters([
+  it('treats a matching referrer as a candidate, not a conservative union', () => {
+    const nodes = [
       tab({
         id: 1,
         url: 'https://news.example.com/story',
@@ -151,9 +156,11 @@ describe('buildTaskClusters — referrer click-source', () => {
         referrerUrl: 'https://news.example.com/story',
         semanticLabel: '百科条目',
       }),
-    ]);
-    assert.equal(clusters.length, 1);
-    assert.ok(clusters[0].edges.referrer >= 1);
+    ];
+    const clusters = buildTaskClusters(nodes);
+    assert.equal(clusters.length, 2);
+    const cands = collectRuleCandidates(nodes);
+    assert.ok(cands.some((p) => p.kind === 'referrer' && p.a === 1 && p.b === 2));
   });
 });
 
@@ -589,14 +596,18 @@ describe('independently opened same-product tabs cluster without navigation', ()
     assert.equal(clusterOf(clusters, 43).tabIds.length, 1);
   });
 
-  it('true click opener still clusters a real navigation chain', () => {
-    const clusters = buildTaskClusters(repoAndSite('zed', { withNav: true }));
+  it('true click opener still clusters a same-product navigation chain via content/class', () => {
+    const nodes = repoAndSite('zed', { withNav: true });
+    const clusters = buildTaskClusters(nodes);
     assert.equal(clusters.length, 1);
-    assert.ok(clusters[0].edges.opener >= 1);
+    assert.ok(clusters[0].edges.project >= 1);
+    assert.equal(clusters[0].edges.opener, 0, 'opener is a hint, not a conservative union');
+    const cands = collectRuleCandidates(nodes);
+    assert.ok(cands.some((p) => p.kind === 'opener' && p.a === 31 && p.b === 32));
   });
 
-  it('true referrer still clusters a click-source chain even without product identity', () => {
-    const clusters = buildTaskClusters([
+  it('true referrer without product identity stays split (candidate only)', () => {
+    const nodes = [
       tab({
         id: 1,
         url: 'https://news.example.com/story',
@@ -610,8 +621,233 @@ describe('independently opened same-product tabs cluster without navigation', ()
         referrerUrl: 'https://news.example.com/story',
         semanticLabel: '百科条目',
       }),
-    ]);
-    assert.equal(clusters.length, 1);
-    assert.ok(clusters[0].edges.referrer >= 1);
+    ];
+    const clusters = buildTaskClusters(nodes);
+    assert.equal(clusters.length, 2);
+    const cands = collectRuleCandidates(nodes);
+    assert.ok(cands.some((p) => p.kind === 'referrer' && p.a === 1 && p.b === 2));
+  });
+});
+
+/**
+ * Screenshot blob: a local proxy, three work docs, and a different-port
+ * localhost app were chained by reliable opener and named 「本地应用」.
+ * Content/class must win; opener must not glue different products together.
+ */
+describe('mixed opener chain across local apps and work docs', () => {
+  const t0 = 2_100_000_000_000;
+  const proxy = tab({
+    id: 1,
+    windowId: 1,
+    url: 'http://127.0.0.1:8787/',
+    title: 'Claude Model Proxy',
+    semanticLabel: 'Claude Model Proxy',
+    createdAt: t0,
+  });
+  const yuqueA = tab({
+    id: 2,
+    windowId: 1,
+    openerTabId: 1,
+    openerFromNavigation: true,
+    url: 'https://docs.example.net/team-a/plan/workload-split',
+    title: '二期工作量拆解',
+    semanticLabel: '二期工作量拆解',
+    createdAt: t0 + 5_000,
+  });
+  const yuqueB = tab({
+    id: 3,
+    windowId: 1,
+    openerTabId: 2,
+    openerFromNavigation: true,
+    url: 'https://docs.example.net/team-b/book/notify-module',
+    title: '通知模块',
+    semanticLabel: '通知模块',
+    createdAt: t0 + 8_000,
+  });
+  const yuqueC = tab({
+    id: 4,
+    windowId: 1,
+    openerTabId: 3,
+    openerFromNavigation: true,
+    url: 'https://docs.example.net/team-b/book/event-center',
+    title: '事件中心',
+    semanticLabel: '事件中心',
+    createdAt: t0 + 11_000,
+  });
+  const localNod = tab({
+    id: 5,
+    windowId: 1,
+    openerTabId: 4,
+    openerFromNavigation: true,
+    url: 'http://localhost:4310/',
+    title: 'Nod',
+    semanticLabel: 'Nod',
+    createdAt: t0 + 20_000,
+  });
+  const nodSite = tab({
+    id: 6,
+    windowId: 2,
+    url: 'https://nod.example.dev/',
+    title: 'Nod - Your personal agent',
+    semanticLabel: 'Nod 官网',
+    createdAt: t0 + 120_000,
+  });
+  const nodRepo = tab({
+    id: 7,
+    windowId: 2,
+    url: 'https://github.com/acme/nod',
+    title: 'acme/nod: Open source personal agent for local workflows',
+    semanticLabel: 'Nod 仓库',
+    createdAt: t0 + 180_000,
+  });
+
+  function mixedNodes() {
+    return [proxy, yuqueA, yuqueB, yuqueC, localNod, nodSite, nodRepo];
+  }
+
+  it('does not hard-merge proxy, work docs, and a different-port local app via opener', () => {
+    const nodes = mixedNodes();
+    const clusters = buildTaskClusters(nodes);
+    assert.notEqual(
+      clusterOf(clusters, 1).id,
+      clusterOf(clusters, 5).id,
+      'different localhost ports are different products',
+    );
+    assert.equal(clusterOf(clusters, 1).tabIds.includes(2), false);
+    assert.equal(clusterOf(clusters, 1).tabIds.includes(5), false);
+    for (const docId of [2, 3, 4]) {
+      assert.equal(clusterOf(clusters, 1).tabIds.includes(docId), false);
+      assert.equal(clusterOf(clusters, 5).tabIds.includes(docId), false);
+    }
+    assert.equal(
+      clusters.some((c) => c.label === '本地应用' && c.tabIds.length > 1),
+      false,
+      'a mixed blob must not inherit the generic localhost bucket name',
+    );
+    const cands = collectRuleCandidates(nodes);
+    assert.ok(cands.some((p) => p.kind === 'opener' && p.a === 1 && p.b === 2));
+    assert.ok(cands.some((p) => p.kind === 'opener' && p.a === 4 && p.b === 5));
+  });
+
+  it('groups related work docs by project path; model may join the remaining doc', () => {
+    const nodes = mixedNodes();
+    const first = buildTaskClusters(nodes);
+    assert.equal(clusterOf(first, 3).id, clusterOf(first, 4).id, 'same book path is one class');
+    assert.notEqual(
+      clusterOf(first, 2).id,
+      clusterOf(first, 3).id,
+      'a different docs space stays split until the model speaks',
+    );
+    const joined = applyModelJudgment(
+      nodes,
+      first,
+      { merges: [[2, 3]] },
+      {},
+      buildTaskClusters,
+    );
+    assert.equal(clusterOf(joined, 2).id, clusterOf(joined, 3).id);
+    assert.equal(clusterOf(joined, 2).id, clusterOf(joined, 4).id);
+    assert.equal(clusterOf(joined, 2).tabIds.includes(1), false);
+    assert.equal(clusterOf(joined, 2).tabIds.includes(5), false);
+  });
+
+  it('lets the localhost app join its official site and GitHub repo', () => {
+    const clusters = buildTaskClusters(mixedNodes());
+    const nod = clusterOf(clusters, 5);
+    assert.ok(nod.tabIds.includes(6), 'official site');
+    assert.ok(nod.tabIds.includes(7), 'GitHub repo');
+    assert.equal(nod.tabIds.includes(1), false);
+    assert.equal(nod.label === '本地应用', false);
+  });
+
+  it('does not persist model unions as session merges; a later pass can revise', () => {
+    const nodes = mixedNodes();
+    const first = buildTaskClusters(nodes);
+    const merged = applyModelJudgment(
+      nodes,
+      first,
+      { merges: [[1, 2], [2, 5]] },
+      {},
+      buildTaskClusters,
+    );
+    assert.ok(clusterOf(merged, 1).tabIds.includes(2));
+    assert.ok(clusterOf(merged, 1).tabIds.includes(5));
+
+    const revised = buildTaskClusters(nodes);
+    assert.equal(clusterOf(revised, 1).tabIds.includes(2), false);
+    assert.equal(clusterOf(revised, 1).tabIds.includes(5), false);
+
+    const session = recordSessionFeedback({ merges: [], splits: [] }, 'merge', [1, 2]);
+    const forced = buildTaskClusters(nodes, { sessionMerges: session.merges });
+    assert.ok(clusterOf(forced, 1).tabIds.includes(2));
+    assert.ok(clusterOf(forced, 1).edges.feedback >= 1);
+  });
+
+  it('screenshot-shaped URLs follow the same content/class rules (not a host blocklist)', () => {
+    const nodes = [
+      tab({
+        id: 11,
+        url: 'http://127.0.0.1:8787/',
+        title: 'Claude Model Proxy',
+        semanticLabel: 'Claude Model Proxy',
+        openerFromNavigation: true,
+      }),
+      tab({
+        id: 12,
+        openerTabId: 11,
+        openerFromNavigation: true,
+        url: 'https://yuque.antfin.com/ut4tfg/vxlotz/sadixn77owe2zsav',
+        title: '二期工作量拆解',
+        semanticLabel: '二期工作量拆解',
+      }),
+      tab({
+        id: 13,
+        openerTabId: 12,
+        openerFromNavigation: true,
+        url: 'https://yuque.antfin.com/ot2rzd/scbe7o/gk3suqp8zbmmypzf',
+        title: '通知模块',
+        semanticLabel: '通知模块',
+      }),
+      tab({
+        id: 14,
+        openerTabId: 13,
+        openerFromNavigation: true,
+        url: 'https://yuque.antfin.com/ot2rzd/scbe7o/rsrgy9z2bn8gdw36',
+        title: '事件中心',
+        semanticLabel: '事件中心',
+      }),
+      tab({
+        id: 15,
+        openerTabId: 14,
+        openerFromNavigation: true,
+        url: 'http://localhost:4310/',
+        title: 'Nod',
+        semanticLabel: 'Nod',
+      }),
+      tab({
+        id: 16,
+        url: 'https://nod.n8n.io/',
+        title: 'Nod - Your personal agent',
+        semanticLabel: 'Nod 官网',
+      }),
+      tab({
+        id: 17,
+        url: 'https://github.com/n8n-io/nod',
+        title: 'n8n-io/nod: Open source personal agent',
+        semanticLabel: 'Nod 仓库',
+      }),
+    ];
+    const clusters = buildTaskClusters(nodes);
+    assert.equal(clusterOf(clusters, 11).tabIds.includes(12), false);
+    assert.equal(clusterOf(clusters, 11).tabIds.includes(15), false);
+    assert.equal(clusterOf(clusters, 13).id, clusterOf(clusters, 14).id);
+    const nod = clusterOf(clusters, 15);
+    assert.ok(nod.tabIds.includes(16));
+    assert.ok(nod.tabIds.includes(17));
+    assert.equal(nod.label === '本地应用', false);
+    assert.equal(
+      clusters.some((c) => c.label === '本地应用' && c.tabIds.some((id) => id !== 11)),
+      false,
+    );
   });
 });

@@ -28,7 +28,7 @@ import { listUncachedEligibleTabs } from '../shared/refine-queue.js';
 import { buildTaskClusters, collectRuleCandidates } from '../shared/task-graph.js';
 import { shouldSkipUrl } from '../shared/url-utils.js';
 import { classifyPage, tryModelSameGroupJudge } from './classifier.js';
-import { loadPriors, loadSessionFeedback, recordModelMerges } from './nav-memory.js';
+import { loadPriors, loadSessionFeedback } from './nav-memory.js';
 import { attachLineage, hydrateLineage, patchLineage } from './tab-lineage.js';
 import {
   getTabSummary,
@@ -362,7 +362,9 @@ async function maybeApplyModelJudge(clusters, nodes, buildOpts) {
       null,
     );
     if (!judgment?.merges?.length) return clusters;
-    await recordModelMerges(judgment.merges);
+    // Model unions apply for this pass only. Do not persist them as session
+    // feedback — that override is reserved for explicit user merge/split, and
+    // a later judge pass must be able to revise model mistakes.
     return applyModelJudgment(nodes, clusters, judgment, buildOpts, buildTaskClusters);
   } catch (err) {
     console.warn('[SmartTabPilot] model same-group judge skipped', err);

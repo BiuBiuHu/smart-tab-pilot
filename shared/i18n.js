@@ -53,7 +53,7 @@ export const MESSAGES = {
     customSaved: '自定义模型已保存。',
     fallbackCustom: '当前将使用自定义模型为任务簇命名（分组本身按任务导航图，非域名）。',
     fallbackHeuristic:
-      '无可用模型时，标题/URL 中明显同一产品或同一项目路径的页面仍会归为一组；同窗口、开页时间或弱 opener 不会硬合并。主题名用启发式。',
+      '无可用模型时，标题/URL 中明显同一产品或同一项目路径的页面仍会归为一组；同窗口、开页时间、opener/referrer 不会把不同品类硬并在一起。主题名用启发式。',
 
     togglesTitle: '功能开关',
     toggleDedupe: '精确 URL 去重跳转（含 path / query / hash）',
@@ -182,7 +182,7 @@ export const MESSAGES = {
     fallbackCustom:
       'Task clusters will be named by the custom model (grouping follows the task graph, not domains).',
     fallbackHeuristic:
-      'With no model, obviously same-product pages (shared distinctive name in title or URL, or same project path) still cluster. Same window, nearby open time, or a weak opener never hard-merges. Names use heuristics.',
+      'With no model, obviously same-product pages (shared distinctive name in title or URL, or same project path) still cluster. Same window, nearby open time, or opener/referrer never hard-merge different-class pages. Names use heuristics.',
 
     togglesTitle: 'Feature toggles',
     toggleDedupe: 'Exact-URL dedupe jump (path, query, and hash)',
